@@ -14,23 +14,19 @@ object Apollo extends App {
       : RIO[Console with Has[Synthesizer] with Has[Sequencer], Unit] = for {
     sequence <- UIO(new Sequence(Sequence.PPQ, 30))
     track <- UIO(sequence.createTrack())
+    part = Part(sequence, track, 0, 0)
     notes = Seq(
       Note(Tone(Pitch.C, 4), Duration.Crotchet),
       Note(Tone(Pitch.D, 4), Duration.Crotchet),
       Note(Tone(Pitch.E, 4), Duration.Crotchet),
       Note(Tone(Pitch.F, 4), Duration.Crotchet),
+      Rest(Duration.Crotchet),
       Note(Tone(Pitch.G, 4), Duration.Crotchet),
       Note(Tone(Pitch.A, 4), Duration.Crotchet),
       Note(Tone(Pitch.B, 4), Duration.Crotchet),
-      Note(Tone(Pitch.C, 5), Duration.Crotchet),
+      Note(Tone(Pitch.C, 5), Duration.Crotchet)
     )
-    _ = (notes ++ notes.reverse).foreach(note =>
-      addToTrack(
-        sequence,
-        track,
-        note
-      )
-    )
+    _ = part.append(notes ++ notes.reverse)
     _ <- playSequence(
       sequence,
       instruments = Map(0 -> nonPercusssionInstruments("square-wave"))
@@ -80,47 +76,80 @@ object Apollo extends App {
       )(sequencer => Task(sequencer.close).orDie)
       .toLayer
 
-  final case class Note(tone: Tone, duration: Duration)
-  final case class Rest(duration: Duration)
-
-  def addToTrack(
+  final case class Part(
       sequence: Sequence,
       track: Track,
-      note: Note,
-      channel: Int = 0,
-      velocity: Int = 127
-  ): Unit = {
-    val toneNumber =
-      (note.tone.octave + 1) * 12 + note.tone.pitch.chroma
-    val pulsesPerQuarterNote = sequence.getResolution()
-    val ticks =
-      ((pulsesPerQuarterNote * 4) / note.duration.denominator).toIntExact
-    val _ = track.add(
-      new MidiEvent(
-        new ShortMessage(
-          ShortMessage.NOTE_ON,
-          channel,
-          toneNumber,
-          velocity
-        ),
-        track.ticks()
+      channel: Int,
+      offset: Long
+  ) {
+
+    def append(events: Seq[Event]): Part =
+      events.foldLeft(this)(_ append _)
+
+    def append(event: Event): Part =
+      event match {
+        case note: Note => appendNote(note)
+        case rest: Rest => appendRest(rest)
+      }
+
+    private[this] def appendNote(
+        note: Note,
+        velocity: Int = 127
+    ): Part = {
+      val toneNumber =
+        (note.tone.octave + 1) * 12 + note.tone.pitch.chroma
+      val pulsesPerQuarterNote = sequence.getResolution()
+      val ticks =
+        ((pulsesPerQuarterNote * 4) / note.duration.denominator).toIntExact
+      track.add(
+        new MidiEvent(
+          new ShortMessage(
+            ShortMessage.NOTE_ON,
+            channel,
+            toneNumber,
+            velocity
+          ),
+          offset
+        )
       )
-    )
-    val _ = track.add(
-      new MidiEvent(
-        new ShortMessage(
-          ShortMessage.NOTE_OFF,
-          channel,
-          toneNumber,
-          velocity
-        ),
-        track.ticks() + ticks
+      track.add(
+        new MidiEvent(
+          new ShortMessage(
+            ShortMessage.NOTE_OFF,
+            channel,
+            toneNumber,
+            velocity
+          ),
+          offset + ticks
+        )
       )
-    )
+      copy(
+        sequence,
+        track,
+        channel,
+        offset + ticks
+      )
+    }
+
+    private[this] def appendRest(rest: Rest): Part = {
+      val pulsesPerQuarterNote = sequence.getResolution()
+      val ticks =
+        ((pulsesPerQuarterNote * 4) / rest.duration.denominator).toIntExact
+      copy(
+        sequence,
+        track,
+        channel,
+        offset + ticks
+      )
+    }
+
   }
 
-  final case class Tone(pitch: Pitch, octave: Int)
+  sealed abstract class Event
+  final case class Note(tone: Tone, duration: Duration) extends Event
+  final case class Rest(duration: Duration) extends Event
 
+  final case class Tone(pitch: Pitch, octave: Int)
   final case class Duration(denominator: BigDecimal)
 
   object Duration {
