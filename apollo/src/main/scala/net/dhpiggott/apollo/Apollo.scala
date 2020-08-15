@@ -21,7 +21,13 @@ object Apollo extends App {
       Note(Tone(Pitch.E, 4), Duration.Crotchet),
       Note(Tone(Pitch.F, 4), Duration.Crotchet),
       Rest(Duration.Crotchet),
-      Note(Tone(Pitch.G, 4), Duration.Crotchet),
+      Chord(
+        Seq(
+          Note(Tone(Pitch.C, 4), Duration.Quaver),
+          Note(Tone(Pitch.E, 4), Duration.Crotchet),
+          Note(Tone(Pitch.G, 4), Duration.Crotchet)
+        )
+      ),
       Note(Tone(Pitch.A, 4), Duration.Crotchet),
       Note(Tone(Pitch.B, 4), Duration.Crotchet),
       Note(Tone(Pitch.C, 5), Duration.Crotchet)
@@ -88,9 +94,26 @@ object Apollo extends App {
 
     def append(event: Event): Part =
       event match {
+        case chord: Chord => appendChord(chord)
         case note: Note => appendNote(note)
         case rest: Rest => appendRest(rest)
       }
+
+    private[this] def appendChord(
+        chord: Chord
+    ): Part = {
+      chord.notes.foreach(appendNote(_))
+      val shortestNote = chord.notes.sortBy(_.duration.denominator).last
+      val pulsesPerQuarterNote = sequence.getResolution()
+      val ticks =
+        ((pulsesPerQuarterNote * 4) / shortestNote.duration.denominator).toIntExact
+      copy(
+        sequence,
+        track,
+        channel,
+        offset + ticks
+      )
+    }
 
     private[this] def appendNote(
         note: Note,
@@ -146,6 +169,7 @@ object Apollo extends App {
   }
 
   sealed abstract class Event
+  final case class Chord(notes: Seq[Note]) extends Event
   final case class Note(tone: Tone, duration: Duration) extends Event
   final case class Rest(duration: Duration) extends Event
 
