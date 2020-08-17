@@ -17,7 +17,7 @@ object Apollo extends App {
     part = Part(
       sequence.getResolution(),
       currentOctave = 4,
-      currentNoteDuration = Duration.Crotchet,
+      currentNoteDuration = Duration(4),
       currentNoteVolume = 127,
       channel = 0,
       offset = 0,
@@ -26,21 +26,21 @@ object Apollo extends App {
     notes = Seq(
       Note(Pitch.C),
       Note(Pitch.D),
-      Rest(Duration.Minim),
+      Rest(Duration(2)),
       Barline,
-      Note(Pitch.E, 4, Duration.Crotchet),
+      Note(Pitch.E, 4, Duration(4)),
       Note(Pitch.F),
-      Rest(Duration.Minim),
+      Rest(Duration(2)),
       Barline,
       Chord(
         Seq(
-          Note(Pitch.C, 4, Duration.Quaver),
-          Note(Pitch.E, 4, Duration.Crotchet),
-          Note(Pitch.G, 4, Duration.Crotchet)
+          Note(Pitch.C, 4, Duration(8)),
+          Note(Pitch.E, 4, Duration(4)),
+          Note(Pitch.G, 4, Duration(4))
         )
       ),
-      Rest(Duration.Quaver),
-      Note(Pitch.A, 4, Duration.Crotchet),
+      Rest(Duration(8)),
+      Note(Pitch.A, 4, Duration(4)),
       // FIXME: Shouldn't need to specify this here just to have it
       // get reset when reversed...
       Note(Pitch.B, 4),
@@ -125,24 +125,24 @@ object Apollo extends App {
         pulsesPerQuarterNote,
         // Duration of longest note
         currentOctave = chord.notes
-          .sortBy(_.duration.getOrElse(currentNoteDuration).denominator)
+          .sortBy(_.duration.getOrElse(currentNoteDuration).reciprocal)
           .head
           .octave
           .getOrElse(currentOctave),
         currentNoteDuration = chord.notes
-          .sortBy(_.duration.getOrElse(currentNoteDuration).denominator)
+          .sortBy(_.duration.getOrElse(currentNoteDuration).reciprocal)
           .head
           .duration
           .getOrElse(currentNoteDuration),
         currentNoteVolume = chord.notes
-          .sortBy(_.duration.getOrElse(currentNoteDuration).denominator)
+          .sortBy(_.duration.getOrElse(currentNoteDuration).reciprocal)
           .head
           .volume
           .getOrElse(currentNoteVolume),
         channel,
         // Duration of shortest note
         offset + chord.notes
-          .sortBy(_.duration.getOrElse(currentNoteDuration).denominator)
+          .sortBy(_.duration.getOrElse(currentNoteDuration).reciprocal)
           .last
           .duration
           .getOrElse(currentNoteDuration)
@@ -238,22 +238,9 @@ object Apollo extends App {
   }
   case object Barline extends Event
 
-  final case class Duration(denominator: BigDecimal) {
+  final case class Duration(reciprocal: Int) {
     def ticks(pulsesPerQuarterNote: Int): Int =
-      ((pulsesPerQuarterNote * 4) / denominator).toIntExact
-  }
-
-  object Duration {
-    val Large = Duration(0.125)
-    val Long = Duration(0.25)
-    val Breve = Duration(0.5)
-    val Semibreve = Duration(1)
-    val Minim = Duration(2)
-    val Crotchet = Duration(4)
-    val Quaver = Duration(8)
-    val Semiquaver = Duration(16)
-    val Demisemiquaver = Duration(32)
-    val Hemidemisemiquaver = Duration(64)
+      ((pulsesPerQuarterNote * 4) / reciprocal)
   }
 
   final case class Pitch(chroma: Int) {
