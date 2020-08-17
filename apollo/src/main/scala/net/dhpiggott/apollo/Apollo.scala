@@ -14,7 +14,14 @@ object Apollo extends App {
       : RIO[Console with Has[Synthesizer] with Has[Sequencer], Unit] = for {
     sequence <- UIO(new Sequence(Sequence.PPQ, 30))
     track <- UIO(sequence.createTrack())
-    part = Part(sequence.getResolution(), Duration.Crotchet, 0, 0, Seq.empty)
+    part = Part(
+      sequence.getResolution(),
+      defaultNoteDuration = Duration.Crotchet,
+      defaultNoteVolume = 127,
+      channel = 0,
+      offset = 0,
+      events = Seq.empty
+    )
     notes = Seq(
       Note(Tone(Pitch.C, 4)),
       Note(Tone(Pitch.D, 4)),
@@ -89,7 +96,8 @@ object Apollo extends App {
 
   final case class Part(
       pulsesPerQuarterNote: Int,
-      defautNoteDuration: Duration,
+      defaultNoteDuration: Duration,
+      defaultNoteVolume: Int,
       channel: Int,
       offset: Long,
       events: Seq[MidiEvent]
@@ -112,18 +120,23 @@ object Apollo extends App {
       copy(
         pulsesPerQuarterNote,
         // Duration of longest note
-        defautNoteDuration = chord.notes
-          .sortBy(_.duration.getOrElse(defautNoteDuration).denominator)
+        defaultNoteDuration = chord.notes
+          .sortBy(_.duration.getOrElse(defaultNoteDuration).denominator)
           .head
           .duration
-          .getOrElse(defautNoteDuration),
+          .getOrElse(defaultNoteDuration),
+        defaultNoteVolume = chord.notes
+          .sortBy(_.duration.getOrElse(defaultNoteDuration).denominator)
+          .head
+          .volume
+          .getOrElse(defaultNoteVolume),
         channel,
         // Duration of shortest note
         offset + chord.notes
-          .sortBy(_.duration.getOrElse(defautNoteDuration).denominator)
+          .sortBy(_.duration.getOrElse(defaultNoteDuration).denominator)
           .last
           .duration
-          .getOrElse(defautNoteDuration)
+          .getOrElse(defaultNoteDuration)
           .ticks(pulsesPerQuarterNote),
         events ++ midiEvents(chord.notes)
       )
@@ -131,10 +144,11 @@ object Apollo extends App {
     private[this] def appendNote(note: Note): Part =
       copy(
         pulsesPerQuarterNote,
-        defautNoteDuration = note.duration.getOrElse(defautNoteDuration),
+        defaultNoteDuration = note.duration.getOrElse(defaultNoteDuration),
+        defaultNoteVolume = note.volume.getOrElse(defaultNoteVolume),
         channel,
         offset + note.duration
-          .getOrElse(defautNoteDuration)
+          .getOrElse(defaultNoteDuration)
           .ticks(pulsesPerQuarterNote),
         events ++ midiEvents(Seq(note))
       )
@@ -142,10 +156,11 @@ object Apollo extends App {
     private[this] def appendRest(rest: Rest): Part =
       copy(
         pulsesPerQuarterNote,
-        defautNoteDuration = rest.duration.getOrElse(defautNoteDuration),
+        defaultNoteDuration = rest.duration.getOrElse(defaultNoteDuration),
+        defaultNoteVolume,
         channel,
         offset + rest.duration
-          .getOrElse(defautNoteDuration)
+          .getOrElse(defaultNoteDuration)
           .ticks(pulsesPerQuarterNote),
         events
       )
@@ -159,7 +174,7 @@ object Apollo extends App {
             ShortMessage.NOTE_ON,
             channel,
             toneNumber,
-            note.velocity
+            note.volume.getOrElse(defaultNoteVolume)
           ),
           offset
         )
@@ -168,27 +183,33 @@ object Apollo extends App {
             ShortMessage.NOTE_OFF,
             channel,
             toneNumber,
-            note.velocity
+            note.volume.getOrElse(defaultNoteVolume)
           ),
           offset + note.duration
-            .getOrElse(defautNoteDuration)
+            .getOrElse(defaultNoteDuration)
             .ticks(pulsesPerQuarterNote)
         )
       } yield Seq(noteOn, noteOff)).flatten
 
   }
 
+  // TODO: CRAM notation (see https://github.com/alda-lang/alda-core/blob/master/src/alda/lisp/events/cram.clj)
+  // TODO: Variables (see https://github.com/alda-lang/alda-core/blob/master/src/alda/lisp/events/variable.clj)
+  // TODO: Voices (see https://github.com/alda-lang/alda-core/blob/master/src/alda/lisp/events/voice.clj)
   sealed abstract class Event
   final case class Chord(notes: Seq[Note]) extends Event
-  final case class Note(tone: Tone, duration: Option[Duration], velocity: Int)
-      extends Event
+  final case class Note(
+      tone: Tone,
+      duration: Option[Duration],
+      volume: Option[Int]
+  ) extends Event
   object Note {
     def apply(tone: Tone): Note =
-      Note(tone, duration = None, velocity = 127)
+      Note(tone, duration = None, volume = None)
     def apply(tone: Tone, duration: Duration): Note =
-      Note(tone, Some(duration), velocity = 127)
-    def apply(tone: Tone, duration: Duration, velocity: Int): Note =
-      Note(tone, Some(duration), velocity)
+      Note(tone, Some(duration), volume = None)
+    def apply(tone: Tone, duration: Duration, volume: Int): Note =
+      Note(tone, Some(duration), Some(volume))
   }
 
   final case class Rest(duration: Option[Duration]) extends Event
