@@ -1,7 +1,5 @@
 package net.dhpiggott.apollo
 
-import javax.sound.midi._
-
 final case class Pitch(chroma: Int) {
   def + = Pitch(chroma + 1)
   def - = Pitch(chroma - 1)
@@ -19,21 +17,18 @@ object Pitch {
 // TODO: CRAM notation (see https://github.com/alda-lang/alda-core/blob/master/src/alda/lisp/events/cram.clj)
 // TODO: Variables (see https://github.com/alda-lang/alda-core/blob/master/src/alda/lisp/events/variable.clj)
 // TODO: Voices (see https://github.com/alda-lang/alda-core/blob/master/src/alda/lisp/events/voice.clj)
-sealed abstract class Event
+sealed abstract class ScoreElement
 
 final case class Note(
     pitch: Pitch,
     octave: Option[Int],
     length: Option[Note.Length],
     volume: Option[Int]
-) extends Event
+) extends ScoreElement
 
 object Note {
 
-  final case class Length(reciprocal: Int) {
-    def ticks(pulsesPerQuarterNote: Int): Int =
-      ((pulsesPerQuarterNote * 4) / reciprocal)
-  }
+  final case class Length(reciprocal: Int)
 
   def apply(pitch: Pitch): Note =
     Note(pitch, octave = None, length = None, volume = None)
@@ -50,109 +45,70 @@ object Note {
     Note(pitch, Some(octave), Some(length), Some(volume))
 }
 
-final case class Chord(notes: Seq[Note]) extends Event
+final case class Chord(notes: Seq[Note]) extends ScoreElement
 
-final case class Rest(noteLength: Option[Note.Length]) extends Event
+final case class Rest(noteLength: Option[Note.Length]) extends ScoreElement
 object Rest {
   def apply(noteLength: Note.Length): Rest =
     Rest(Some(noteLength))
 }
 
-case object Barline extends Event
+case object Barline extends ScoreElement
+
+final case class NoteAttributes(
+    octave: Int,
+    length: Note.Length,
+    volume: Int
+) {
+  def updated(scoreElement: ScoreElement): NoteAttributes = scoreElement match {
+    case chord: Chord =>
+      val longestNote = chord.notes
+        .sortBy(_.length.getOrElse(length).reciprocal)
+        .headOption
+      longestNote match {
+        case None              => this
+        case Some(longestNote) => updated(longestNote)
+      }
+
+    case note: Note =>
+      copy(
+        octave = note.octave.getOrElse(octave),
+        length = note.length.getOrElse(length),
+        volume = note.volume.getOrElse(volume)
+      )
+
+    case rest: Rest =>
+      copy(length = rest.noteLength.getOrElse(length))
+
+    case Barline =>
+      this
+  }
+}
 
 final case class Part(
-    pulsesPerQuarterNote: Int,
-    currentOctave: Int,
-    currentNoteLength: Note.Length,
-    currentNoteVolume: Int,
-    channel: Int,
-    offset: Long,
-    events: Seq[MidiEvent]
-) {
+    instrument: String,
+    elements: Seq[(ScoreElement, NoteAttributes)]
+)
 
-  def append(events: Seq[Event]): Part =
-    events.foldLeft(this)(_ append _)
+object Part {
+  def apply(
+      instrument: String,
+      defaultNoteAttributes: NoteAttributes,
+      elements: Seq[ScoreElement]
+  ): Part =
+    Part(
+      instrument,
+      elements
+        .foldLeft(Seq.empty[(ScoreElement, NoteAttributes)]) {
+          case (resolvedElements, element) =>
+            resolvedElements match {
+              case (_ -> noteAttributes) +: _ =>
+                (element -> noteAttributes.updated(element)) +: resolvedElements
 
-  def append(event: Event): Part =
-    event match {
-      case chord: Chord => appendChord(chord)
-      case note: Note   => appendNote(note)
-      case rest: Rest   => appendRest(rest)
-      case Barline      => this
-    }
-
-  private[this] def appendChord(
-      chord: Chord
-  ): Part = {
-    val longestNote = chord.notes
-      .sortBy(_.length.getOrElse(currentNoteLength).reciprocal)
-      .head
-    val shortestNote = chord.notes
-      .sortBy(_.length.getOrElse(currentNoteLength).reciprocal)
-      .last
-    copy(
-      pulsesPerQuarterNote,
-      currentOctave = longestNote.octave.getOrElse(currentOctave),
-      currentNoteLength = longestNote.length.getOrElse(currentNoteLength),
-      currentNoteVolume = longestNote.volume.getOrElse(currentNoteVolume),
-      channel,
-      offset + shortestNote.length
-        .getOrElse(currentNoteLength)
-        .ticks(pulsesPerQuarterNote),
-      events ++ midiEvents(chord.notes)
+              case Nil =>
+                Seq(element -> defaultNoteAttributes.updated(element))
+            }
+        }
+        .reverse
     )
-  }
-
-  private[this] def appendNote(note: Note): Part =
-    copy(
-      pulsesPerQuarterNote,
-      currentOctave = note.octave.getOrElse(currentOctave),
-      currentNoteLength = note.length.getOrElse(currentNoteLength),
-      currentNoteVolume = note.volume.getOrElse(currentNoteVolume),
-      channel,
-      offset + note.length
-        .getOrElse(currentNoteLength)
-        .ticks(pulsesPerQuarterNote),
-      events ++ midiEvents(Seq(note))
-    )
-
-  private[this] def appendRest(rest: Rest): Part =
-    copy(
-      pulsesPerQuarterNote,
-      currentOctave,
-      currentNoteLength = rest.noteLength.getOrElse(currentNoteLength),
-      currentNoteVolume,
-      channel,
-      offset + rest.noteLength
-        .getOrElse(currentNoteLength)
-        .ticks(pulsesPerQuarterNote),
-      events
-    )
-
-  private[this] def midiEvents(notes: Seq[Note]): Seq[MidiEvent] =
-    (for {
-      note <- notes
-      toneNumber = (note.octave.getOrElse(currentOctave) + 1) * 12 + note.pitch.chroma
-      noteOn = new MidiEvent(
-        new ShortMessage(
-          ShortMessage.NOTE_ON,
-          channel,
-          toneNumber,
-          note.volume.getOrElse(currentNoteVolume)
-        ),
-        offset
-      )
-      noteOff = new MidiEvent(
-        new ShortMessage(
-          ShortMessage.NOTE_OFF,
-          channel,
-          toneNumber,
-          note.volume.getOrElse(currentNoteVolume)
-        ),
-        offset + note.length
-          .getOrElse(currentNoteLength)
-          .ticks(pulsesPerQuarterNote)
-      )
-    } yield Seq(noteOn, noteOff)).flatten
-
 }

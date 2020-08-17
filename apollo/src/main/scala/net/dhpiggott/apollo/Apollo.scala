@@ -11,49 +11,48 @@ object Apollo extends App {
     program.provideCustomLayer(synthesizer ++ sequencer).exitCode
 
   private[this] val program
-      : RIO[Console with Has[Synthesizer] with Has[Sequencer], Unit] = for {
-    sequence <- UIO(new Sequence(Sequence.PPQ, 30))
-    track <- UIO(sequence.createTrack())
-    part = Part(
-      sequence.getResolution(),
-      currentOctave = 4,
-      currentNoteLength = Note.Length(4),
-      currentNoteVolume = 127,
-      channel = 0,
-      offset = 0,
-      events = Seq.empty
-    )
-    notes = Seq(
-      Note(Pitch.C),
-      Note(Pitch.D),
-      Rest(Note.Length(2)),
-      Barline,
-      Note(Pitch.E, 4, Note.Length(4)),
-      Note(Pitch.F),
-      Rest(Note.Length(2)),
-      Barline,
-      Chord(
-        Seq(
-          Note(Pitch.C, 4, Note.Length(8)),
-          Note(Pitch.E, 4, Note.Length(4)),
-          Note(Pitch.G, 4, Note.Length(4))
-        )
+      : RIO[Console with Has[Synthesizer] with Has[Sequencer], Unit] = {
+    val part = Part(
+      instrument = "square-wave",
+      defaultNoteAttributes = NoteAttributes(
+        octave = 4,
+        length = Note.Length(4),
+        volume = 127
       ),
-      Rest(Note.Length(8)),
-      Note(Pitch.A, 4, Note.Length(4)),
-      // FIXME: Shouldn't need to specify this here just to have it
-      // get reset when reversed...
-      Note(Pitch.B, 4),
-      Note(Pitch.C, 5),
-      Barline
+      elements = Seq(
+        Note(Pitch.C),
+        Note(Pitch.D),
+        Rest(Note.Length(2)),
+        Barline,
+        Note(Pitch.E, 4, Note.Length(4)),
+        Note(Pitch.F),
+        Rest(Note.Length(2)),
+        Barline,
+        Chord(
+          Seq(
+            Note(Pitch.C, 4, Note.Length(8)),
+            Note(Pitch.E, 4, Note.Length(4)),
+            Note(Pitch.G, 4, Note.Length(4))
+          )
+        ),
+        Rest(Note.Length(8)),
+        Note(Pitch.A, 4, Note.Length(4)),
+        Note(Pitch.B),
+        Note(Pitch.C, 5),
+        Barline
+      )
     )
-    _ = part.append(notes ++ notes.reverse).events.foreach(track.add)
-    _ <- playSequence(
-      sequence,
+    playSequence(
+      SequenceGenerator.generateSequence(
+        part.copy(
+          elements = part.elements ++ part.elements.reverse
+        ),
+        channel = 0
+      ),
       instruments =
-        Map(0 -> Instruments.nonPercusssionInstruments("square-wave"))
+        Map(0 -> Instruments.nonPercusssionInstruments(part.instrument))
     )
-  } yield ()
+  }
 
   private[this] def playSequence(
       sequence: Sequence,
