@@ -16,32 +16,35 @@ object Apollo extends App {
     track <- UIO(sequence.createTrack())
     part = Part(
       sequence.getResolution(),
-      defaultNoteDuration = Duration.Crotchet,
-      defaultNoteVolume = 127,
+      currentOctave = 4,
+      currentNoteDuration = Duration.Crotchet,
+      currentNoteVolume = 127,
       channel = 0,
       offset = 0,
       events = Seq.empty
     )
     notes = Seq(
-      Note(Tone(Pitch.C, 4)),
-      Note(Tone(Pitch.D, 4)),
+      Note(Pitch.C),
+      Note(Pitch.D),
       Rest(Duration.Minim),
       Barline,
-      Note(Tone(Pitch.E, 4), Duration.Crotchet),
-      Note(Tone(Pitch.F, 4)),
+      Note(Pitch.E, 4, Duration.Crotchet),
+      Note(Pitch.F),
       Rest(Duration.Minim),
       Barline,
       Chord(
         Seq(
-          Note(Tone(Pitch.C, 4), Duration.Quaver),
-          Note(Tone(Pitch.E, 4), Duration.Crotchet),
-          Note(Tone(Pitch.G, 4), Duration.Crotchet)
+          Note(Pitch.C, 4, Duration.Quaver),
+          Note(Pitch.E, 4, Duration.Crotchet),
+          Note(Pitch.G, 4, Duration.Crotchet)
         )
       ),
       Rest(Duration.Quaver),
-      Note(Tone(Pitch.A, 4), Duration.Crotchet),
-      Note(Tone(Pitch.B, 4)),
-      Note(Tone(Pitch.C, 5)),
+      Note(Pitch.A, 4, Duration.Crotchet),
+      // FIXME: Shouldn't need to specify this here just to have it
+      // get reset when reversed...
+      Note(Pitch.B, 4),
+      Note(Pitch.C, 5),
       Barline
     )
     _ = part.append(notes ++ notes.reverse).events.foreach(track.add)
@@ -96,8 +99,9 @@ object Apollo extends App {
 
   final case class Part(
       pulsesPerQuarterNote: Int,
-      defaultNoteDuration: Duration,
-      defaultNoteVolume: Int,
+      currentOctave: Int,
+      currentNoteDuration: Duration,
+      currentNoteVolume: Int,
       channel: Int,
       offset: Long,
       events: Seq[MidiEvent]
@@ -120,23 +124,28 @@ object Apollo extends App {
       copy(
         pulsesPerQuarterNote,
         // Duration of longest note
-        defaultNoteDuration = chord.notes
-          .sortBy(_.duration.getOrElse(defaultNoteDuration).denominator)
+        currentOctave = chord.notes
+          .sortBy(_.duration.getOrElse(currentNoteDuration).denominator)
+          .head
+          .octave
+          .getOrElse(currentOctave),
+        currentNoteDuration = chord.notes
+          .sortBy(_.duration.getOrElse(currentNoteDuration).denominator)
           .head
           .duration
-          .getOrElse(defaultNoteDuration),
-        defaultNoteVolume = chord.notes
-          .sortBy(_.duration.getOrElse(defaultNoteDuration).denominator)
+          .getOrElse(currentNoteDuration),
+        currentNoteVolume = chord.notes
+          .sortBy(_.duration.getOrElse(currentNoteDuration).denominator)
           .head
           .volume
-          .getOrElse(defaultNoteVolume),
+          .getOrElse(currentNoteVolume),
         channel,
         // Duration of shortest note
         offset + chord.notes
-          .sortBy(_.duration.getOrElse(defaultNoteDuration).denominator)
+          .sortBy(_.duration.getOrElse(currentNoteDuration).denominator)
           .last
           .duration
-          .getOrElse(defaultNoteDuration)
+          .getOrElse(currentNoteDuration)
           .ticks(pulsesPerQuarterNote),
         events ++ midiEvents(chord.notes)
       )
@@ -144,11 +153,12 @@ object Apollo extends App {
     private[this] def appendNote(note: Note): Part =
       copy(
         pulsesPerQuarterNote,
-        defaultNoteDuration = note.duration.getOrElse(defaultNoteDuration),
-        defaultNoteVolume = note.volume.getOrElse(defaultNoteVolume),
+        currentOctave = note.octave.getOrElse(currentOctave),
+        currentNoteDuration = note.duration.getOrElse(currentNoteDuration),
+        currentNoteVolume = note.volume.getOrElse(currentNoteVolume),
         channel,
         offset + note.duration
-          .getOrElse(defaultNoteDuration)
+          .getOrElse(currentNoteDuration)
           .ticks(pulsesPerQuarterNote),
         events ++ midiEvents(Seq(note))
       )
@@ -156,11 +166,12 @@ object Apollo extends App {
     private[this] def appendRest(rest: Rest): Part =
       copy(
         pulsesPerQuarterNote,
-        defaultNoteDuration = rest.duration.getOrElse(defaultNoteDuration),
-        defaultNoteVolume,
+        currentOctave,
+        currentNoteDuration = rest.duration.getOrElse(currentNoteDuration),
+        currentNoteVolume,
         channel,
         offset + rest.duration
-          .getOrElse(defaultNoteDuration)
+          .getOrElse(currentNoteDuration)
           .ticks(pulsesPerQuarterNote),
         events
       )
@@ -168,13 +179,13 @@ object Apollo extends App {
     private[this] def midiEvents(notes: Seq[Note]): Seq[MidiEvent] =
       (for {
         note <- notes
-        toneNumber = (note.tone.octave + 1) * 12 + note.tone.pitch.chroma
+        toneNumber = (note.octave.getOrElse(currentOctave) + 1) * 12 + note.pitch.chroma
         noteOn = new MidiEvent(
           new ShortMessage(
             ShortMessage.NOTE_ON,
             channel,
             toneNumber,
-            note.volume.getOrElse(defaultNoteVolume)
+            note.volume.getOrElse(currentNoteVolume)
           ),
           offset
         )
@@ -183,10 +194,10 @@ object Apollo extends App {
             ShortMessage.NOTE_OFF,
             channel,
             toneNumber,
-            note.volume.getOrElse(defaultNoteVolume)
+            note.volume.getOrElse(currentNoteVolume)
           ),
           offset + note.duration
-            .getOrElse(defaultNoteDuration)
+            .getOrElse(currentNoteDuration)
             .ticks(pulsesPerQuarterNote)
         )
       } yield Seq(noteOn, noteOff)).flatten
@@ -199,17 +210,25 @@ object Apollo extends App {
   sealed abstract class Event
   final case class Chord(notes: Seq[Note]) extends Event
   final case class Note(
-      tone: Tone,
+      pitch: Pitch,
+      octave: Option[Int],
       duration: Option[Duration],
       volume: Option[Int]
   ) extends Event
   object Note {
-    def apply(tone: Tone): Note =
-      Note(tone, duration = None, volume = None)
-    def apply(tone: Tone, duration: Duration): Note =
-      Note(tone, Some(duration), volume = None)
-    def apply(tone: Tone, duration: Duration, volume: Int): Note =
-      Note(tone, Some(duration), Some(volume))
+    def apply(pitch: Pitch): Note =
+      Note(pitch, octave = None, duration = None, volume = None)
+    def apply(pitch: Pitch, octave: Int): Note =
+      Note(pitch, Some(octave), duration = None, volume = None)
+    def apply(pitch: Pitch, octave: Int, duration: Duration): Note =
+      Note(pitch, Some(octave), Some(duration), volume = None)
+    def apply(
+        pitch: Pitch,
+        octave: Int,
+        duration: Duration,
+        volume: Int
+    ): Note =
+      Note(pitch, Some(octave), Some(duration), Some(volume))
   }
 
   final case class Rest(duration: Option[Duration]) extends Event
@@ -219,7 +238,6 @@ object Apollo extends App {
   }
   case object Barline extends Event
 
-  final case class Tone(pitch: Pitch, octave: Int)
   final case class Duration(denominator: BigDecimal) {
     def ticks(pulsesPerQuarterNote: Int): Int =
       ((pulsesPerQuarterNote * 4) / denominator).toIntExact
