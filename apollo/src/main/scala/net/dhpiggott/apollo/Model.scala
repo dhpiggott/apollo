@@ -2,6 +2,63 @@ package net.dhpiggott.apollo
 
 import javax.sound.midi._
 
+final case class Pitch(chroma: Int) {
+  def + = Pitch(chroma + 1)
+  def - = Pitch(chroma - 1)
+}
+object Pitch {
+  val C = Pitch(0)
+  val D = Pitch(2)
+  val E = Pitch(4)
+  val F = Pitch(5)
+  val G = Pitch(7)
+  val A = Pitch(9)
+  val B = Pitch(11)
+}
+
+final case class Duration(reciprocal: Int) {
+  def ticks(pulsesPerQuarterNote: Int): Int =
+    ((pulsesPerQuarterNote * 4) / reciprocal)
+}
+
+// TODO: CRAM notation (see https://github.com/alda-lang/alda-core/blob/master/src/alda/lisp/events/cram.clj)
+// TODO: Variables (see https://github.com/alda-lang/alda-core/blob/master/src/alda/lisp/events/variable.clj)
+// TODO: Voices (see https://github.com/alda-lang/alda-core/blob/master/src/alda/lisp/events/voice.clj)
+sealed abstract class Event
+
+final case class Note(
+    pitch: Pitch,
+    octave: Option[Int],
+    duration: Option[Duration],
+    volume: Option[Int]
+) extends Event
+
+object Note {
+  def apply(pitch: Pitch): Note =
+    Note(pitch, octave = None, duration = None, volume = None)
+  def apply(pitch: Pitch, octave: Int): Note =
+    Note(pitch, Some(octave), duration = None, volume = None)
+  def apply(pitch: Pitch, octave: Int, duration: Duration): Note =
+    Note(pitch, Some(octave), Some(duration), volume = None)
+  def apply(
+      pitch: Pitch,
+      octave: Int,
+      duration: Duration,
+      volume: Int
+  ): Note =
+    Note(pitch, Some(octave), Some(duration), Some(volume))
+}
+
+final case class Chord(notes: Seq[Note]) extends Event
+
+final case class Rest(duration: Option[Duration]) extends Event
+object Rest {
+  def apply(duration: Duration): Rest =
+    Rest(Some(duration))
+}
+
+case object Barline extends Event
+
 final case class Part(
     pulsesPerQuarterNote: Int,
     currentOctave: Int,
@@ -107,58 +164,4 @@ final case class Part(
       )
     } yield Seq(noteOn, noteOff)).flatten
 
-}
-
-// TODO: CRAM notation (see https://github.com/alda-lang/alda-core/blob/master/src/alda/lisp/events/cram.clj)
-// TODO: Variables (see https://github.com/alda-lang/alda-core/blob/master/src/alda/lisp/events/variable.clj)
-// TODO: Voices (see https://github.com/alda-lang/alda-core/blob/master/src/alda/lisp/events/voice.clj)
-sealed abstract class Event
-final case class Chord(notes: Seq[Note]) extends Event
-final case class Note(
-    pitch: Pitch,
-    octave: Option[Int],
-    duration: Option[Duration],
-    volume: Option[Int]
-) extends Event
-object Note {
-  def apply(pitch: Pitch): Note =
-    Note(pitch, octave = None, duration = None, volume = None)
-  def apply(pitch: Pitch, octave: Int): Note =
-    Note(pitch, Some(octave), duration = None, volume = None)
-  def apply(pitch: Pitch, octave: Int, duration: Duration): Note =
-    Note(pitch, Some(octave), Some(duration), volume = None)
-  def apply(
-      pitch: Pitch,
-      octave: Int,
-      duration: Duration,
-      volume: Int
-  ): Note =
-    Note(pitch, Some(octave), Some(duration), Some(volume))
-}
-
-final case class Rest(duration: Option[Duration]) extends Event
-object Rest {
-  def apply(duration: Duration): Rest =
-    Rest(Some(duration))
-}
-case object Barline extends Event
-
-final case class Duration(reciprocal: Int) {
-  def ticks(pulsesPerQuarterNote: Int): Int =
-    ((pulsesPerQuarterNote * 4) / reciprocal)
-}
-
-final case class Pitch(chroma: Int) {
-  def + = Pitch(chroma + 1)
-  def - = Pitch(chroma - 1)
-}
-
-object Pitch {
-  val C = Pitch(0)
-  val D = Pitch(2)
-  val E = Pitch(4)
-  val F = Pitch(5)
-  val G = Pitch(7)
-  val A = Pitch(9)
-  val B = Pitch(11)
 }
