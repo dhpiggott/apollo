@@ -83,35 +83,25 @@ final case class Part(
 
   private[this] def appendChord(
       chord: Chord
-  ): Part =
+  ): Part = {
+    val longestNote = chord.notes
+      .sortBy(_.length.getOrElse(currentNoteLength).reciprocal)
+      .head
+    val shortestNote = chord.notes
+      .sortBy(_.length.getOrElse(currentNoteLength).reciprocal)
+      .last
     copy(
       pulsesPerQuarterNote,
-      // Length of longest note
-      currentOctave = chord.notes
-        .sortBy(_.length.getOrElse(currentNoteLength).reciprocal)
-        .head
-        .octave
-        .getOrElse(currentOctave),
-      currentNoteLength = chord.notes
-        .sortBy(_.length.getOrElse(currentNoteLength).reciprocal)
-        .head
-        .length
-        .getOrElse(currentNoteLength),
-      currentNoteVolume = chord.notes
-        .sortBy(_.length.getOrElse(currentNoteLength).reciprocal)
-        .head
-        .volume
-        .getOrElse(currentNoteVolume),
+      currentOctave = longestNote.octave.getOrElse(currentOctave),
+      currentNoteLength = longestNote.length.getOrElse(currentNoteLength),
+      currentNoteVolume = longestNote.volume.getOrElse(currentNoteVolume),
       channel,
-      // Length of shortest note
-      offset + chord.notes
-        .sortBy(_.length.getOrElse(currentNoteLength).reciprocal)
-        .last
-        .length
+      offset + shortestNote.length
         .getOrElse(currentNoteLength)
         .ticks(pulsesPerQuarterNote),
       events ++ midiEvents(chord.notes)
     )
+  }
 
   private[this] def appendNote(note: Note): Part =
     copy(
