@@ -14,14 +14,14 @@ object Apollo extends App {
       : RIO[Console with Has[Synthesizer] with Has[Sequencer], Unit] = for {
     sequence <- UIO(new Sequence(Sequence.PPQ, 30))
     track <- UIO(sequence.createTrack())
-    part = Part(sequence.getResolution(), 0, 0, Seq.empty)
+    part = Part(sequence.getResolution(), Duration.Crotchet, 0, 0, Seq.empty)
     notes = Seq(
-      Note(Tone(Pitch.C, 4), Duration.Crotchet),
-      Note(Tone(Pitch.D, 4), Duration.Crotchet),
+      Note(Tone(Pitch.C, 4)),
+      Note(Tone(Pitch.D, 4)),
       Rest(Duration.Minim),
       Barline,
       Note(Tone(Pitch.E, 4), Duration.Crotchet),
-      Note(Tone(Pitch.F, 4), Duration.Crotchet),
+      Note(Tone(Pitch.F, 4)),
       Rest(Duration.Minim),
       Barline,
       Chord(
@@ -33,8 +33,8 @@ object Apollo extends App {
       ),
       Rest(Duration.Quaver),
       Note(Tone(Pitch.A, 4), Duration.Crotchet),
-      Note(Tone(Pitch.B, 4), Duration.Crotchet),
-      Note(Tone(Pitch.C, 5), Duration.Crotchet),
+      Note(Tone(Pitch.B, 4)),
+      Note(Tone(Pitch.C, 5)),
       Barline
     )
     _ = part.append(notes ++ notes.reverse).events.foreach(track.add)
@@ -89,6 +89,7 @@ object Apollo extends App {
 
   final case class Part(
       pulsesPerQuarterNote: Int,
+      defautNoteDuration: Duration,
       channel: Int,
       offset: Long,
       events: Seq[MidiEvent]
@@ -110,11 +111,19 @@ object Apollo extends App {
     ): Part =
       copy(
         pulsesPerQuarterNote,
+        // Duration of longest note
+        defautNoteDuration = chord.notes
+          .sortBy(_.duration.getOrElse(defautNoteDuration).denominator)
+          .head
+          .duration
+          .getOrElse(defautNoteDuration),
         channel,
+        // Duration of shortest note
         offset + chord.notes
-          .sortBy(_.duration.denominator)
+          .sortBy(_.duration.getOrElse(defautNoteDuration).denominator)
           .last
           .duration
+          .getOrElse(defautNoteDuration)
           .ticks(pulsesPerQuarterNote),
         events ++ midiEvents(chord.notes)
       )
@@ -122,16 +131,22 @@ object Apollo extends App {
     private[this] def appendNote(note: Note): Part =
       copy(
         pulsesPerQuarterNote,
+        defautNoteDuration = note.duration.getOrElse(defautNoteDuration),
         channel,
-        offset + note.duration.ticks(pulsesPerQuarterNote),
+        offset + note.duration
+          .getOrElse(defautNoteDuration)
+          .ticks(pulsesPerQuarterNote),
         events ++ midiEvents(Seq(note))
       )
 
     private[this] def appendRest(rest: Rest): Part =
       copy(
         pulsesPerQuarterNote,
+        defautNoteDuration = rest.duration.getOrElse(defautNoteDuration),
         channel,
-        offset + rest.duration.ticks(pulsesPerQuarterNote),
+        offset + rest.duration
+          .getOrElse(defautNoteDuration)
+          .ticks(pulsesPerQuarterNote),
         events
       )
 
@@ -155,7 +170,9 @@ object Apollo extends App {
             toneNumber,
             note.velocity
           ),
-          offset + note.duration.ticks(pulsesPerQuarterNote)
+          offset + note.duration
+            .getOrElse(defautNoteDuration)
+            .ticks(pulsesPerQuarterNote)
         )
       } yield Seq(noteOn, noteOff)).flatten
 
@@ -163,9 +180,22 @@ object Apollo extends App {
 
   sealed abstract class Event
   final case class Chord(notes: Seq[Note]) extends Event
-  final case class Note(tone: Tone, duration: Duration, velocity: Int = 127)
+  final case class Note(tone: Tone, duration: Option[Duration], velocity: Int)
       extends Event
-  final case class Rest(duration: Duration) extends Event
+  object Note {
+    def apply(tone: Tone): Note =
+      Note(tone, duration = None, velocity = 127)
+    def apply(tone: Tone, duration: Duration): Note =
+      Note(tone, Some(duration), velocity = 127)
+    def apply(tone: Tone, duration: Duration, velocity: Int): Note =
+      Note(tone, Some(duration), velocity)
+  }
+
+  final case class Rest(duration: Option[Duration]) extends Event
+  object Rest {
+    def apply(duration: Duration): Rest =
+      Rest(Some(duration))
+  }
   case object Barline extends Event
 
   final case class Tone(pitch: Pitch, octave: Int)
