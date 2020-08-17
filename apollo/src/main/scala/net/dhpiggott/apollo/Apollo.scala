@@ -18,9 +18,12 @@ object Apollo extends App {
     notes = Seq(
       Note(Tone(Pitch.C, 4), Duration.Crotchet),
       Note(Tone(Pitch.D, 4), Duration.Crotchet),
+      Rest(Duration.Minim),
+      Barline,
       Note(Tone(Pitch.E, 4), Duration.Crotchet),
       Note(Tone(Pitch.F, 4), Duration.Crotchet),
-      Rest(Duration.Crotchet),
+      Rest(Duration.Minim),
+      Barline,
       Chord(
         Seq(
           Note(Tone(Pitch.C, 4), Duration.Quaver),
@@ -28,9 +31,11 @@ object Apollo extends App {
           Note(Tone(Pitch.G, 4), Duration.Crotchet)
         )
       ),
+      Rest(Duration.Quaver),
       Note(Tone(Pitch.A, 4), Duration.Crotchet),
       Note(Tone(Pitch.B, 4), Duration.Crotchet),
-      Note(Tone(Pitch.C, 5), Duration.Crotchet)
+      Note(Tone(Pitch.C, 5), Duration.Crotchet),
+      Barline
     )
     _ = part.append(notes ++ notes.reverse).events.foreach(track.add)
     _ <- playSequence(
@@ -97,15 +102,20 @@ object Apollo extends App {
         case chord: Chord => appendChord(chord)
         case note: Note   => appendNote(note)
         case rest: Rest   => appendRest(rest)
+        case Barline      => this
       }
 
     private[this] def appendChord(
         chord: Chord
-    ): Part = 
+    ): Part =
       copy(
         pulsesPerQuarterNote,
         channel,
-        offset + chord.notes.sortBy(_.duration.denominator).last.duration.ticks(pulsesPerQuarterNote),
+        offset + chord.notes
+          .sortBy(_.duration.denominator)
+          .last
+          .duration
+          .ticks(pulsesPerQuarterNote),
         events ++ midiEvents(chord.notes)
       )
 
@@ -156,6 +166,7 @@ object Apollo extends App {
   final case class Note(tone: Tone, duration: Duration, velocity: Int = 127)
       extends Event
   final case class Rest(duration: Duration) extends Event
+  case object Barline extends Event
 
   final case class Tone(pitch: Pitch, octave: Int)
   final case class Duration(denominator: BigDecimal) {
