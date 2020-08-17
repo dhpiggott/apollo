@@ -17,7 +17,7 @@ object Apollo extends App {
     part = Part(
       sequence.getResolution(),
       currentOctave = 4,
-      currentNoteDuration = Duration(4),
+      currentNoteLength = Note.Length(4),
       currentNoteVolume = 127,
       channel = 0,
       offset = 0,
@@ -26,21 +26,21 @@ object Apollo extends App {
     notes = Seq(
       Note(Pitch.C),
       Note(Pitch.D),
-      Rest(Duration(2)),
+      Rest(Note.Length(2)),
       Barline,
-      Note(Pitch.E, 4, Duration(4)),
+      Note(Pitch.E, 4, Note.Length(4)),
       Note(Pitch.F),
-      Rest(Duration(2)),
+      Rest(Note.Length(2)),
       Barline,
       Chord(
         Seq(
-          Note(Pitch.C, 4, Duration(8)),
-          Note(Pitch.E, 4, Duration(4)),
-          Note(Pitch.G, 4, Duration(4))
+          Note(Pitch.C, 4, Note.Length(8)),
+          Note(Pitch.E, 4, Note.Length(4)),
+          Note(Pitch.G, 4, Note.Length(4))
         )
       ),
-      Rest(Duration(8)),
-      Note(Pitch.A, 4, Duration(4)),
+      Rest(Note.Length(8)),
+      Note(Pitch.A, 4, Note.Length(4)),
       // FIXME: Shouldn't need to specify this here just to have it
       // get reset when reversed...
       Note(Pitch.B, 4),

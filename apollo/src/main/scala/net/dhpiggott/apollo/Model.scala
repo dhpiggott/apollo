@@ -16,11 +16,6 @@ object Pitch {
   val B = Pitch(11)
 }
 
-final case class Duration(reciprocal: Int) {
-  def ticks(pulsesPerQuarterNote: Int): Int =
-    ((pulsesPerQuarterNote * 4) / reciprocal)
-}
-
 // TODO: CRAM notation (see https://github.com/alda-lang/alda-core/blob/master/src/alda/lisp/events/cram.clj)
 // TODO: Variables (see https://github.com/alda-lang/alda-core/blob/master/src/alda/lisp/events/variable.clj)
 // TODO: Voices (see https://github.com/alda-lang/alda-core/blob/master/src/alda/lisp/events/voice.clj)
@@ -29,32 +24,38 @@ sealed abstract class Event
 final case class Note(
     pitch: Pitch,
     octave: Option[Int],
-    duration: Option[Duration],
+    length: Option[Note.Length],
     volume: Option[Int]
 ) extends Event
 
 object Note {
+
+  final case class Length(reciprocal: Int) {
+    def ticks(pulsesPerQuarterNote: Int): Int =
+      ((pulsesPerQuarterNote * 4) / reciprocal)
+  }
+
   def apply(pitch: Pitch): Note =
-    Note(pitch, octave = None, duration = None, volume = None)
+    Note(pitch, octave = None, length = None, volume = None)
   def apply(pitch: Pitch, octave: Int): Note =
-    Note(pitch, Some(octave), duration = None, volume = None)
-  def apply(pitch: Pitch, octave: Int, duration: Duration): Note =
-    Note(pitch, Some(octave), Some(duration), volume = None)
+    Note(pitch, Some(octave), length = None, volume = None)
+  def apply(pitch: Pitch, octave: Int, length: Length): Note =
+    Note(pitch, Some(octave), Some(length), volume = None)
   def apply(
       pitch: Pitch,
       octave: Int,
-      duration: Duration,
+      length: Length,
       volume: Int
   ): Note =
-    Note(pitch, Some(octave), Some(duration), Some(volume))
+    Note(pitch, Some(octave), Some(length), Some(volume))
 }
 
 final case class Chord(notes: Seq[Note]) extends Event
 
-final case class Rest(duration: Option[Duration]) extends Event
+final case class Rest(noteLength: Option[Note.Length]) extends Event
 object Rest {
-  def apply(duration: Duration): Rest =
-    Rest(Some(duration))
+  def apply(noteLength: Note.Length): Rest =
+    Rest(Some(noteLength))
 }
 
 case object Barline extends Event
@@ -62,7 +63,7 @@ case object Barline extends Event
 final case class Part(
     pulsesPerQuarterNote: Int,
     currentOctave: Int,
-    currentNoteDuration: Duration,
+    currentNoteLength: Note.Length,
     currentNoteVolume: Int,
     channel: Int,
     offset: Long,
@@ -85,29 +86,29 @@ final case class Part(
   ): Part =
     copy(
       pulsesPerQuarterNote,
-      // Duration of longest note
+      // Length of longest note
       currentOctave = chord.notes
-        .sortBy(_.duration.getOrElse(currentNoteDuration).reciprocal)
+        .sortBy(_.length.getOrElse(currentNoteLength).reciprocal)
         .head
         .octave
         .getOrElse(currentOctave),
-      currentNoteDuration = chord.notes
-        .sortBy(_.duration.getOrElse(currentNoteDuration).reciprocal)
+      currentNoteLength = chord.notes
+        .sortBy(_.length.getOrElse(currentNoteLength).reciprocal)
         .head
-        .duration
-        .getOrElse(currentNoteDuration),
+        .length
+        .getOrElse(currentNoteLength),
       currentNoteVolume = chord.notes
-        .sortBy(_.duration.getOrElse(currentNoteDuration).reciprocal)
+        .sortBy(_.length.getOrElse(currentNoteLength).reciprocal)
         .head
         .volume
         .getOrElse(currentNoteVolume),
       channel,
-      // Duration of shortest note
+      // Length of shortest note
       offset + chord.notes
-        .sortBy(_.duration.getOrElse(currentNoteDuration).reciprocal)
+        .sortBy(_.length.getOrElse(currentNoteLength).reciprocal)
         .last
-        .duration
-        .getOrElse(currentNoteDuration)
+        .length
+        .getOrElse(currentNoteLength)
         .ticks(pulsesPerQuarterNote),
       events ++ midiEvents(chord.notes)
     )
@@ -116,11 +117,11 @@ final case class Part(
     copy(
       pulsesPerQuarterNote,
       currentOctave = note.octave.getOrElse(currentOctave),
-      currentNoteDuration = note.duration.getOrElse(currentNoteDuration),
+      currentNoteLength = note.length.getOrElse(currentNoteLength),
       currentNoteVolume = note.volume.getOrElse(currentNoteVolume),
       channel,
-      offset + note.duration
-        .getOrElse(currentNoteDuration)
+      offset + note.length
+        .getOrElse(currentNoteLength)
         .ticks(pulsesPerQuarterNote),
       events ++ midiEvents(Seq(note))
     )
@@ -129,11 +130,11 @@ final case class Part(
     copy(
       pulsesPerQuarterNote,
       currentOctave,
-      currentNoteDuration = rest.duration.getOrElse(currentNoteDuration),
+      currentNoteLength = rest.noteLength.getOrElse(currentNoteLength),
       currentNoteVolume,
       channel,
-      offset + rest.duration
-        .getOrElse(currentNoteDuration)
+      offset + rest.noteLength
+        .getOrElse(currentNoteLength)
         .ticks(pulsesPerQuarterNote),
       events
     )
@@ -158,8 +159,8 @@ final case class Part(
           toneNumber,
           note.volume.getOrElse(currentNoteVolume)
         ),
-        offset + note.duration
-          .getOrElse(currentNoteDuration)
+        offset + note.length
+          .getOrElse(currentNoteLength)
           .ticks(pulsesPerQuarterNote)
       )
     } yield Seq(noteOn, noteOff)).flatten
