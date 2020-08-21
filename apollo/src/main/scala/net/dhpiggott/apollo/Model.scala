@@ -17,6 +17,7 @@ object Pitch {
 // TODO: CRAM notation (see https://github.com/alda-lang/alda-core/blob/master/src/alda/lisp/events/cram.clj)
 // TODO: Variables (see https://github.com/alda-lang/alda-core/blob/master/src/alda/lisp/events/variable.clj)
 // TODO: Voices (see https://github.com/alda-lang/alda-core/blob/master/src/alda/lisp/events/voice.clj)
+// See also: https://github.com/alda-lang/alda/tree/master/doc
 sealed abstract class ScoreElement
 
 final case class Note(
@@ -85,6 +86,16 @@ final case class NoteAttributes(
   }
 }
 
+// TODO: Review
+// https://github.com/alda-lang/alda-core/tree/master/src/alda/lisp,
+// https://github.com/alda-lang/alda-core/blob/master/src/alda/lisp/score.clj,
+// https://github.com/alda-lang/alda-core/blob/master/src/alda/lisp/score/part.clj
+// and
+// https://github.com/alda-lang/alda-server-clj/blob/master/src/alda/worker.clj,
+// https://github.com/alda-lang/alda-server-clj/blob/master/src/alda/server.clj
+// and
+// https://github.com/alda-lang/alda-sound-engine-clj/blob/master/src/alda/sound.clj,
+// https://github.com/alda-lang/alda-sound-engine-clj/blob/master/src/alda/sound/midi.clj
 final case class Part(
     instrument: String,
     elements: Seq[(ScoreElement, NoteAttributes)]

@@ -19,6 +19,8 @@ object Apollo extends App {
         length = Note.Length(4),
         volume = 127
       ),
+      // TODO: Build parser - see
+      // https://github.com/alda-lang/alda-core/tree/master/src/alda/parser
       elements = Seq(
         Note(Pitch.C),
         Note(Pitch.D),
