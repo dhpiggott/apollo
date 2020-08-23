@@ -12,13 +12,16 @@ object SequenceGenerator {
       part.elements.foldLeft(Seq.empty[MidiEvent] -> 0L) {
         case ((events, offset), (scoreElement, noteAttributes)) =>
           val (newEvents, offsetIncrement) = scoreElement match {
-            case chord: Chord =>
-              val shortestNote = chord.notes
+            case Octave(_) | OctaveIncrement | OctaveDecrement =>
+              Seq.empty -> 0L
+
+            case Chord(notes) =>
+              val shortestNote = notes
                 .sortBy(_.length.getOrElse(noteAttributes.length).reciprocal)
                 .headOption
               midiEvents(
                 offset,
-                chord.notes,
+                notes,
                 channel,
                 pulsesPerQuarterNote,
                 noteAttributes
@@ -40,10 +43,10 @@ object SequenceGenerator {
                   .getOrElse(noteAttributes.length)
               )
 
-            case rest: Rest =>
+            case Rest(noteLength) =>
               Seq.empty -> pulses(
                 pulsesPerQuarterNote,
-                rest.noteLength
+                noteLength
                   .getOrElse(noteAttributes.length)
               )
 
@@ -65,13 +68,13 @@ object SequenceGenerator {
   ): Seq[MidiEvent] =
     (for {
       note <- notes
-      toneNumber = (note.octave.getOrElse(noteAttributes.octave) + 1) * 12 + note.pitch.chroma
+      toneNumber = (noteAttributes.octave + 1) * 12 + note.pitch.chroma
       noteOn = new MidiEvent(
         new ShortMessage(
           ShortMessage.NOTE_ON,
           channel,
           toneNumber,
-          note.volume.getOrElse(noteAttributes.volume)
+          noteAttributes.volume
         ),
         offset
       )
@@ -80,7 +83,7 @@ object SequenceGenerator {
           ShortMessage.NOTE_OFF,
           channel,
           toneNumber,
-          note.volume.getOrElse(noteAttributes.volume)
+          noteAttributes.volume
         ),
         offset + pulses(
           pulsesPerQuarterNote,

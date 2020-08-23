@@ -20,39 +20,24 @@ object Pitch {
 // See also: https://github.com/alda-lang/alda/tree/master/doc
 sealed abstract class ScoreElement
 
-final case class Note(
-    pitch: Pitch,
-    octave: Option[Int],
-    length: Option[Note.Length],
-    volume: Option[Int]
-) extends ScoreElement
+final case class Octave(number: Int) extends ScoreElement
 
-object Note {
+case object OctaveIncrement extends ScoreElement
 
-  final case class Length(reciprocal: Int)
-
-  def apply(pitch: Pitch): Note =
-    Note(pitch, octave = None, length = None, volume = None)
-  def apply(pitch: Pitch, octave: Int): Note =
-    Note(pitch, Some(octave), length = None, volume = None)
-  def apply(pitch: Pitch, octave: Int, length: Length): Note =
-    Note(pitch, Some(octave), Some(length), volume = None)
-  def apply(
-      pitch: Pitch,
-      octave: Int,
-      length: Length,
-      volume: Int
-  ): Note =
-    Note(pitch, Some(octave), Some(length), Some(volume))
-}
+case object OctaveDecrement extends ScoreElement
 
 final case class Chord(notes: Seq[Note]) extends ScoreElement
 
-final case class Rest(noteLength: Option[Note.Length]) extends ScoreElement
-object Rest {
-  def apply(noteLength: Note.Length): Rest =
-    Rest(Some(noteLength))
+final case class Note(
+    pitch: Pitch,
+    length: Option[Note.Length]
+) extends ScoreElement
+
+object Note {
+  final case class Length(reciprocal: Int)
 }
+
+final case class Rest(noteLength: Option[Note.Length]) extends ScoreElement
 
 case object Barline extends ScoreElement
 
@@ -62,8 +47,17 @@ final case class NoteAttributes(
     volume: Int
 ) {
   def updated(scoreElement: ScoreElement): NoteAttributes = scoreElement match {
-    case chord: Chord =>
-      val longestNote = chord.notes
+    case Octave(number) =>
+      copy(octave = number)
+
+    case OctaveIncrement =>
+      copy(octave = octave + 1)
+
+    case OctaveDecrement =>
+      copy(octave = octave - 1)
+
+    case Chord(notes) =>
+      val longestNote = notes
         .sortBy(_.length.getOrElse(length).reciprocal)
         .headOption
       longestNote match {
@@ -73,13 +67,11 @@ final case class NoteAttributes(
 
     case note: Note =>
       copy(
-        octave = note.octave.getOrElse(octave),
-        length = note.length.getOrElse(length),
-        volume = note.volume.getOrElse(volume)
+        length = note.length.getOrElse(length)
       )
 
-    case rest: Rest =>
-      copy(length = rest.noteLength.getOrElse(length))
+    case Rest(noteLength) =>
+      copy(length = noteLength.getOrElse(length))
 
     case Barline =>
       this

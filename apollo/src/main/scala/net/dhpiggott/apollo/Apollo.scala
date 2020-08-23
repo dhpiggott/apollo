@@ -11,40 +11,11 @@ object Apollo extends App {
     program.provideCustomLayer(synthesizer ++ sequencer).exitCode
 
   private[this] val program
-      : RIO[Console with Has[Synthesizer] with Has[Sequencer], Unit] = {
-    val part = Part(
-      instrument = "square-wave",
-      defaultNoteAttributes = NoteAttributes(
-        octave = 4,
-        length = Note.Length(4),
-        volume = 127
-      ),
-      // TODO: Build parser - see
-      // https://github.com/alda-lang/alda-core/tree/master/src/alda/parser
-      elements = Seq(
-        Note(Pitch.C),
-        Note(Pitch.D),
-        Rest(Note.Length(2)),
-        Barline,
-        Note(Pitch.E, 4, Note.Length(4)),
-        Note(Pitch.F),
-        Rest(Note.Length(2)),
-        Barline,
-        Chord(
-          Seq(
-            Note(Pitch.C, 4, Note.Length(8)),
-            Note(Pitch.E, 4, Note.Length(4)),
-            Note(Pitch.G, 4, Note.Length(4))
-          )
-        ),
-        Rest(Note.Length(8)),
-        Note(Pitch.A, 4, Note.Length(4)),
-        Note(Pitch.B),
-        Note(Pitch.C, 5),
-        Barline
-      )
+      : RIO[Console with Has[Synthesizer] with Has[Sequencer], Unit] = for {
+    part <- ScoreParser.parseScorePart(
+      "square-wave: o4 c d r2 | e4 f r2 | c8/e4/g4 r8 a4 b > c |"
     )
-    playSequence(
+    _ <- playSequence(
       SequenceGenerator.generateSequence(
         part.copy(
           elements = part.elements ++ part.elements.reverse
@@ -54,7 +25,7 @@ object Apollo extends App {
       instruments =
         Map(0 -> Instruments.nonPercusssionInstruments(part.instrument))
     )
-  }
+  } yield ()
 
   private[this] def playSequence(
       sequence: Sequence,
