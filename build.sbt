@@ -7,7 +7,10 @@ lazy val apollo =
       name := "apollo"
     )
     .settings(
-      libraryDependencies += Dependencies.zioCore
+      libraryDependencies ++= Seq(
+        Dependencies.fastParse,
+        Dependencies.zioCore
+      )
     )
     .settings(
       run / fork := true
