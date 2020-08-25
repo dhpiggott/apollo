@@ -17,7 +17,7 @@ object SequenceGenerator {
 
             case Chord(notes) =>
               val shortestNote = notes
-                .sortBy(_.length.getOrElse(noteAttributes.length).reciprocal)
+                .sortBy(_.duration.getOrElse(noteAttributes.duration).value)
                 .headOption
               midiEvents(
                 offset,
@@ -26,8 +26,10 @@ object SequenceGenerator {
                 pulsesPerQuarterNote,
                 noteAttributes
               ) -> pulses(
-                pulsesPerQuarterNote,
-                shortestNote.flatMap(_.length).getOrElse(noteAttributes.length)
+                shortestNote
+                  .flatMap(_.duration)
+                  .getOrElse(noteAttributes.duration),
+                pulsesPerQuarterNote * 4
               )
 
             case note: Note =>
@@ -38,16 +40,16 @@ object SequenceGenerator {
                 pulsesPerQuarterNote,
                 noteAttributes
               ) -> pulses(
-                pulsesPerQuarterNote,
-                note.length
-                  .getOrElse(noteAttributes.length)
+                note.duration
+                  .getOrElse(noteAttributes.duration),
+                pulsesPerQuarterNote * 4
               )
 
             case Rest(noteLength) =>
               Seq.empty -> pulses(
-                pulsesPerQuarterNote,
                 noteLength
-                  .getOrElse(noteAttributes.length)
+                  .getOrElse(noteAttributes.duration),
+                pulsesPerQuarterNote * 4
               )
 
             case Barline =>
@@ -68,7 +70,7 @@ object SequenceGenerator {
   ): Seq[MidiEvent] =
     (for {
       note <- notes
-      toneNumber = (noteAttributes.octave + 1) * 12 + note.pitch.chroma
+      toneNumber = (noteAttributes.octave.value + 1) * 12 + note.pitch.chroma
       noteOn = new MidiEvent(
         new ShortMessage(
           ShortMessage.NOTE_ON,
@@ -86,17 +88,17 @@ object SequenceGenerator {
           noteAttributes.volume
         ),
         offset + pulses(
-          pulsesPerQuarterNote,
-          note.length
-            .getOrElse(noteAttributes.length)
+          note.duration
+            .getOrElse(noteAttributes.duration),
+          pulsesPerQuarterNote * 4
         )
       )
     } yield Seq(noteOn, noteOff)).flatten
 
   private[this] def pulses(
-      pulsesPerQuarterNote: Int,
-      noteLength: Note.Length
+      noteDuration: Note.Duration,
+      pulsesPerNote: Int
   ): Long =
-    ((pulsesPerQuarterNote * 4) / noteLength.reciprocal).toLong
+    (noteDuration.value * pulsesPerNote).toLong
 
 }

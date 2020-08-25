@@ -16,8 +16,11 @@ object ScoreParser {
       case (instrument, scoreElements) =>
         Part(
           instrument,
-          defaultNoteAttributes =
-            NoteAttributes(octave = 4, length = Note.Length(4), volume = 127),
+          defaultNoteAttributes = NoteAttributes(
+            octave = Octave(4),
+            duration = Note.Duration(4),
+            volume = 127
+          ),
           scoreElements
         )
     }
@@ -48,13 +51,15 @@ object ScoreParser {
     P(note.rep(min = 2, sep = "/")).map(Chord)
 
   private[this] def note[_: P]: P[Note] =
-    P(pitch ~ noteLength.?).map {
-      case (pitch, maybeLength) =>
-        Note(pitch, length = maybeLength)
+    P(pitch ~ noteDuration.?).map {
+      case (pitch, maybeDuration) =>
+        Note(pitch, duration = maybeDuration)
     }
 
   private[this] def rest[_: P]: P[Rest] =
-    P("r" ~ noteLength.?).map(maybeLength => Rest(noteLength = maybeLength))
+    P("r" ~ noteDuration.?).map(maybeDuration =>
+      Rest(noteDuration = maybeDuration)
+    )
 
   private[this] def barline[_: P]: P[Barline.type] =
     P("|").map(_ => Barline)
@@ -68,14 +73,24 @@ object ScoreParser {
       case "e" => Pitch.E
       case "f" => Pitch.F
       case "g" => Pitch.G
-    } ~ (P("+").map(_ => 1) | P("-").map(_ => -1)).rep).map {
+    } ~ (P("+").map(_ => 1) | P("-").map(_ => -1)).rep(sep = "")).map {
       case (pitch, accidentals) =>
         pitch.copy(chroma = pitch.chroma + accidentals.sum)
     }
 
-  private[this] def noteLength[_: P]: P[Note.Length] = number.map(Note.Length)
+  // TODO: Add tie support
+  private[this] def noteDuration[_: P]: P[Note.Duration] =
+    P(number ~ P(".").!.rep(sep = "")).map {
+      case (denominator, dots) =>
+        Note.Duration(
+          (1d / denominator) + dots.zipWithIndex.map {
+            case (_, index) =>
+              1d / (math.pow(2d, (index + 1).toDouble) * denominator)
+          }.sum
+        )
+    }
 
   private[this] def number[_: P]: P[Int] =
-    P(CharIn("0-9").rep(1).!.map(_.toInt))
+    P(CharIn("0-9").rep(min = 1, sep = "").!.map(_.toInt))
 
 }

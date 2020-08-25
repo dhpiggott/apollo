@@ -20,7 +20,7 @@ object Pitch {
 // See also: https://github.com/alda-lang/alda/tree/master/doc
 sealed abstract class ScoreElement
 
-final case class Octave(number: Int) extends ScoreElement
+final case class Octave(value: Int) extends ScoreElement
 
 case object OctaveIncrement extends ScoreElement
 
@@ -30,35 +30,35 @@ final case class Chord(notes: Seq[Note]) extends ScoreElement
 
 final case class Note(
     pitch: Pitch,
-    length: Option[Note.Length]
+    duration: Option[Note.Duration]
 ) extends ScoreElement
 
 object Note {
-  final case class Length(reciprocal: Int)
+  final case class Duration(value: Double)
 }
 
-final case class Rest(noteLength: Option[Note.Length]) extends ScoreElement
+final case class Rest(noteDuration: Option[Note.Duration]) extends ScoreElement
 
 case object Barline extends ScoreElement
 
 final case class NoteAttributes(
-    octave: Int,
-    length: Note.Length,
+    octave: Octave,
+    duration: Note.Duration,
     volume: Int
 ) {
   def updated(scoreElement: ScoreElement): NoteAttributes = scoreElement match {
-    case Octave(number) =>
-      copy(octave = number)
+    case octave: Octave =>
+      copy(octave = octave)
 
     case OctaveIncrement =>
-      copy(octave = octave + 1)
+      copy(octave = Octave(octave.value + 1))
 
     case OctaveDecrement =>
-      copy(octave = octave - 1)
+      copy(octave = Octave(octave.value - 1))
 
     case Chord(notes) =>
       val longestNote = notes
-        .sortBy(_.length.getOrElse(length).reciprocal)
+        .sortBy(_.duration.getOrElse(duration).value)
         .headOption
       longestNote match {
         case None              => this
@@ -67,11 +67,11 @@ final case class NoteAttributes(
 
     case note: Note =>
       copy(
-        length = note.length.getOrElse(length)
+        duration = note.duration.getOrElse(duration)
       )
 
-    case Rest(noteLength) =>
-      copy(length = noteLength.getOrElse(length))
+    case Rest(noteDuration) =>
+      copy(duration = noteDuration.getOrElse(duration))
 
     case Barline =>
       this
