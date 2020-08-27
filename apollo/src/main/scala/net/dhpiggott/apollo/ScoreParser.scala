@@ -51,13 +51,13 @@ object ScoreParser {
     P(note.rep(min = 2, sep = "/")).map(Chord)
 
   private[this] def note[_: P]: P[Note] =
-    P(pitch ~ noteDuration.?).map {
+    P(pitch ~ tiedNotesDuration.?).map {
       case (pitch, maybeDuration) =>
         Note(pitch, duration = maybeDuration)
     }
 
   private[this] def rest[_: P]: P[Rest] =
-    P("r" ~ noteDuration.?).map(maybeDuration =>
+    P("r" ~ tiedNotesDuration.?).map(maybeDuration =>
       Rest(noteDuration = maybeDuration)
     )
 
@@ -78,7 +78,11 @@ object ScoreParser {
         pitch.copy(chroma = pitch.chroma + accidentals.sum)
     }
 
-  // TODO: Add tie support
+  private[this] def tiedNotesDuration[_: P]: P[Note.Duration] =
+    noteDuration
+      .rep(min = 1, sep = "~")
+      .map(noteDurations => Note.Duration(noteDurations.map(_.value).sum))
+
   private[this] def noteDuration[_: P]: P[Note.Duration] =
     P(number ~ P(".").!.rep(sep = "")).map {
       case (denominator, dots) =>

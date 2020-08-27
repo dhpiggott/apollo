@@ -13,7 +13,7 @@ object Apollo extends App {
   private[this] val program
       : RIO[Console with Has[Synthesizer] with Has[Sequencer], Unit] = for {
     part <- ScoreParser.parseScorePart(
-      "square-wave: o4 c4. d8 r2 | e8 f r2. | c8/e4/g4 r8 a4 b > c | c2. c4 |"
+      "square-wave: o4 c4. d8 r2 | e8 f r2. | c8/e4/g4 r8 a4 b > c | c2.~4 |"
     )
     _ <- putStrLn(part.elements.map(_._1).toString())
     _ <- playSequence(
