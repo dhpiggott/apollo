@@ -5,6 +5,16 @@ import javax.sound.midi._
 import zio._
 import zio.console._
 
+// TODO: Review
+// https://github.com/alda-lang/alda-core/tree/master/src/alda/lisp,
+// https://github.com/alda-lang/alda-core/blob/master/src/alda/lisp/score.clj,
+// https://github.com/alda-lang/alda-core/blob/master/src/alda/lisp/score/part.clj
+// and
+// https://github.com/alda-lang/alda-server-clj/blob/master/src/alda/worker.clj,
+// https://github.com/alda-lang/alda-server-clj/blob/master/src/alda/server.clj
+// and
+// https://github.com/alda-lang/alda-sound-engine-clj/blob/master/src/alda/sound.clj,
+// https://github.com/alda-lang/alda-sound-engine-clj/blob/master/src/alda/sound/midi.clj
 object Apollo extends App {
 
   override def run(args: List[String]): URIO[ZEnv, ExitCode] =
@@ -13,16 +23,16 @@ object Apollo extends App {
   private[this] val program
       : RIO[Console with Has[Synthesizer] with Has[Sequencer], Unit] = for {
     part <- ScoreParser.parseScorePart(
-      "square-wave: o4 c4. d8 r2 | e8 f r2. | c8/e4/g4 r8 a4 b > c | c2.~4 |"
+      """piano:
+           V0: o4 c4. d8 r2 | e8 f r2. | c8/e4/g4 r8 a4 b > c | c2.~4 |
+           V1: < c8 d e f g a b > c |
+           V2: c8 < b a g f e d c |
+           V0: o4 c1~1/e1~1/g1~1 |
+      """
     )
-    _ <- putStrLn(part.elements.map(_._1).toString())
+    _ <- putStrLn(part.elements.toString())
     _ <- playSequence(
-      SequenceGenerator.generateSequence(
-        part.copy(
-          elements = part.elements ++ part.elements.reverse
-        ),
-        channel = 0
-      ),
+      SequenceGenerator.generateSequence(part, channel = 0),
       instruments =
         Map(0 -> Instruments.nonPercusssionInstruments(part.instrument))
     )

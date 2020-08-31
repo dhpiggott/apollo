@@ -12,18 +12,7 @@ object ScoreParser {
     }
 
   private[this] def part[_: P]: P[Part] =
-    P(instrumentName ~ ":" ~ scoreElement.rep(1)).map {
-      case (instrument, scoreElements) =>
-        Part(
-          instrument,
-          defaultNoteAttributes = NoteAttributes(
-            octave = Octave(4),
-            duration = Note.Duration(4),
-            volume = 127
-          ),
-          scoreElements
-        )
-    }
+    P(instrumentName ~ ":" ~ scoreElement.rep(1)).map(Part.tupled)
 
   private[this] def instrumentName[_: P]: P[String] =
     P(
@@ -35,8 +24,12 @@ object ScoreParser {
 
   private[this] def scoreElement[_: P]: P[ScoreElement] =
     P(
-      octave | octaveIncrement | octaveDecrement | chord | note | rest | barline
+      voice | octave | octaveIncrement | octaveDecrement | chord | note | rest | barline
     )
+
+  private[this] def voice[_: P]: P[Voice] =
+    P("V" ~ CharIn("0-9").rep(min = 1, sep = "").!.map(_.toInt) ~ ":")
+      .map(Voice)
 
   private[this] def octave[_: P]: P[Octave] =
     P("o" ~ number).map(Octave)
