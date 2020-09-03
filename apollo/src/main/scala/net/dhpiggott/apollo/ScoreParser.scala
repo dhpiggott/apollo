@@ -5,11 +5,13 @@ import zio._
 
 object ScoreParser {
 
-  def parseScorePart(scorePart: String): Task[Part] =
-    parse(scorePart, part(_)) match {
+  def parseScorePart(scorePart: String): Task[Part] = {
+    def partWithEnd[_: P]: P[Part] = P(part ~ End)
+    parse(scorePart, partWithEnd(_)) match {
       case failure: Parsed.Failure  => Task.fail(failure.get)
       case Parsed.Success(value, _) => UIO(value)
     }
+  }
 
   private[this] def part[_: P]: P[Part] =
     P(instrumentName ~ ":" ~ scoreElement.rep(1)).map(Part.tupled)
@@ -24,12 +26,18 @@ object ScoreParser {
 
   private[this] def scoreElement[_: P]: P[ScoreElement] =
     P(
-      voice | octave | octaveIncrement | octaveDecrement | chord | note | rest | barline
+      voice | chord | octave | octaveIncrement | octaveDecrement | note | rest | barline
     )
 
   private[this] def voice[_: P]: P[Voice] =
     P("V" ~ CharIn("0-9").rep(min = 1, sep = "").!.map(_.toInt) ~ ":")
       .map(Voice)
+
+  private[this] def chord[_: P]: P[Chord] =
+    P(chordElement.rep(min = 2, sep = "/")).map(Chord)
+
+  private[this] def chordElement[_: P]: P[ScoreElement with ChordElement] =
+    P(octaveIncrement | octaveDecrement | note | rest)
 
   private[this] def octave[_: P]: P[Octave] =
     P("o" ~ number).map(Octave)
@@ -39,9 +47,6 @@ object ScoreParser {
 
   private[this] def octaveDecrement[_: P]: P[OctaveDecrement.type] =
     P("<").map(_ => OctaveDecrement)
-
-  private[this] def chord[_: P]: P[Chord] =
-    P(note.rep(min = 2, sep = "/")).map(Chord)
 
   private[this] def note[_: P]: P[Note] =
     P(pitch ~ tiedNotesDuration.?).map {

@@ -8,42 +8,7 @@ object SequenceGenerator {
       octave: Octave,
       duration: Note.Duration,
       volume: Int
-  ) {
-    def updated(scoreElement: ScoreElement): NoteAttributes =
-      scoreElement match {
-        case _: Voice =>
-          this
-
-        case octave: Octave =>
-          copy(octave = octave)
-
-        case OctaveIncrement =>
-          copy(octave = Octave(octave.value + 1))
-
-        case OctaveDecrement =>
-          copy(octave = Octave(octave.value - 1))
-
-        case Chord(notes) =>
-          val longestNote = notes
-            .sortBy(_.duration.getOrElse(duration).value)
-            .headOption
-          longestNote match {
-            case None              => this
-            case Some(longestNote) => updated(longestNote)
-          }
-
-        case note: Note =>
-          copy(
-            duration = note.duration.getOrElse(duration)
-          )
-
-        case Rest(noteDuration) =>
-          copy(duration = noteDuration.getOrElse(duration))
-
-        case Barline =>
-          this
-      }
-  }
+  )
 
   object NoteAttributes {
     val defaults: NoteAttributes = NoteAttributes(
@@ -70,9 +35,9 @@ object SequenceGenerator {
     val pulsesPerQuarterNote = 30
     val sequence = new Sequence(Sequence.PPQ, pulsesPerQuarterNote)
     val track = sequence.createTrack()
-    val (events, _) =
-      part.elements.foldLeft(
-        Seq.empty[MidiEvent] -> PartState(
+    def generateMidiEvents(
+        elements: Seq[ScoreElement],
+        partState: PartState = PartState(
           currentVoice = Voice(0),
           instrumentStates = Map(
             Voice(0) -> InstrumentState(
@@ -81,6 +46,9 @@ object SequenceGenerator {
             )
           )
         )
+    ): (Seq[MidiEvent], PartState) =
+      elements.foldLeft(
+        Seq.empty[MidiEvent] -> partState
       ) {
         case ((events, partState), scoreElement) =>
           scoreElement match {
@@ -88,7 +56,12 @@ object SequenceGenerator {
               events -> partState.copy(
                 currentVoice = voice,
                 instrumentStates = Map(
-                  voice -> partState.instrumentStates.values.toSeq
+                  voice -> partState.instrumentStates
+                    .filter {
+                      case (Voice(value), _) => value != 0
+                    }
+                    .values
+                    .toSeq
                     .sortBy(_.offset)
                     .lastOption
                     .getOrElse(
@@ -100,15 +73,84 @@ object SequenceGenerator {
             case voice: Voice =>
               events -> partState.copy(
                 currentVoice = voice,
-                instrumentStates = partState.instrumentStates.updated(
-                  voice,
-                  partState.instrumentStates
-                    .get(voice)
-                    .getOrElse(
-                      partState.instrumentStates(Voice(0))
+                instrumentStates = partState.instrumentStates
+                  .updated(
+                    voice,
+                    partState.instrumentStates
+                      .get(voice)
+                      .getOrElse(
+                        partState.instrumentStates(Voice(0))
+                      )
+                  )
+              )
+
+            // FIXME: Check we carry octave/duration/volume changes in the same
+            // way that Alda does, per
+            // https://github.com/alda-lang/alda/blob/master/doc/chords.md
+            case Chord(elements) =>
+              def resetOffset(chordPartState: PartState): PartState =
+                chordPartState.copy(
+                  instrumentStates = chordPartState.instrumentStates.updated(
+                    chordPartState.currentVoice,
+                    chordPartState.currentVoiceInstrumentState.copy(
+                      offset = partState.currentVoiceInstrumentState.offset
+                    )
+                  )
+                )
+
+              val (chordEvents, updatedChordPartState, shortestNoteDuration) =
+                elements.foldLeft(
+                  (
+                    Seq.empty[MidiEvent],
+                    partState,
+                    partState.currentVoiceInstrumentState.noteAttributes.duration
+                  )
+                ) {
+                  case (
+                      (chordEvents, chordPartState, shortestNoteDuration),
+                      chordElement
+                      ) =>
+                    val (chordElementEvents, updatedChordPartState) =
+                      generateMidiEvents(Seq(chordElement), chordPartState)
+                    val chordElementDuration = chordElement match {
+                      case Note(_, Some(duration))  => Some(duration)
+                      case Rest(Some(noteDuration)) => Some(noteDuration)
+                      case _                        => None
+                    }
+                    val updatedShortestNoteDuration =
+                      chordElementDuration match {
+                        case None =>
+                          shortestNoteDuration
+
+                        case Some(noteDuration) =>
+                          Note.Duration(
+                            math.min(
+                              noteDuration.value,
+                              shortestNoteDuration.value
+                            )
+                          )
+                      }
+                    (
+                      chordEvents ++ chordElementEvents,
+                      resetOffset(updatedChordPartState),
+                      updatedShortestNoteDuration
+                    )
+                }
+              events ++ chordEvents ->
+                updatedChordPartState.copy(
+                  instrumentStates =
+                    updatedChordPartState.instrumentStates.updated(
+                      updatedChordPartState.currentVoice,
+                      updatedChordPartState.currentVoiceInstrumentState.copy(
+                        offset =
+                          updatedChordPartState.currentVoiceInstrumentState.offset +
+                            pulses(
+                              shortestNoteDuration,
+                              pulsesPerQuarterNote * 4
+                            )
+                      )
                     )
                 )
-              )
 
             case octave: Octave =>
               events -> partState.copy(
@@ -152,52 +194,6 @@ object SequenceGenerator {
                   )
                 )
               )
-
-            // FIXME: Allow octave changes and rests, and carry duration changes
-            // within chords as per
-            // https://github.com/alda-lang/alda/blob/master/doc/chords.md
-            case Chord(notes) =>
-              val shortestNote = notes
-                .sortBy(
-                  _.duration
-                    .getOrElse(
-                      partState.currentVoiceInstrumentState.noteAttributes.duration
-                    )
-                    .value
-                )
-                .headOption
-              events ++ midiEvents(
-                partState.currentVoiceInstrumentState.offset,
-                notes,
-                channel,
-                pulsesPerQuarterNote,
-                partState.currentVoiceInstrumentState.noteAttributes
-              ) ->
-                partState.copy(
-                  instrumentStates = partState.instrumentStates.updated(
-                    partState.currentVoice,
-                    partState.currentVoiceInstrumentState.copy(
-                      offset = partState.currentVoiceInstrumentState.offset +
-                        pulses(
-                          shortestNote
-                            .flatMap(_.duration)
-                            .getOrElse(
-                              partState.currentVoiceInstrumentState.noteAttributes.duration
-                            ),
-                          pulsesPerQuarterNote * 4
-                        ),
-                      noteAttributes =
-                        partState.currentVoiceInstrumentState.noteAttributes
-                          .copy(
-                            duration = shortestNote
-                              .flatMap(_.duration)
-                              .getOrElse(
-                                partState.currentVoiceInstrumentState.noteAttributes.duration
-                              )
-                          )
-                    )
-                  )
-                )
 
             case note: Note =>
               events ++ midiEvents(
@@ -261,6 +257,7 @@ object SequenceGenerator {
               events -> partState
           }
       }
+    val (events, _) = generateMidiEvents(part.elements)
     events.foreach(track.add)
     sequence
   }

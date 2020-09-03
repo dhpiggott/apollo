@@ -30,11 +30,16 @@ object Apollo extends App {
            V0: o4 c1~1/e1~1/g1~1 |
       """
     )
-    _ <- putStrLn(part.elements.toString())
+    _ <- putStrLn(
+      s"${part.instrument}: ${part.elements.map(_.show).mkString(" ")}"
+    )
     _ <- playSequence(
       SequenceGenerator.generateSequence(part, channel = 0),
-      instruments =
-        Map(0 -> Instruments.nonPercusssionInstruments(part.instrument))
+      instruments = Map(
+        0 -> Instruments.nonPercusssionInstruments(
+          part.instrument
+        )
+      )
     )
   } yield ()
 
