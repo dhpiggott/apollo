@@ -7,6 +7,7 @@ object SequenceGenerator {
   final case class NoteAttributes(
       octave: Octave,
       duration: Note.Duration,
+      transposition: Int,
       volume: Int
   )
 
@@ -14,6 +15,7 @@ object SequenceGenerator {
     val defaults: NoteAttributes = NoteAttributes(
       octave = Octave(4),
       duration = Note.Duration(4),
+      transposition = 0,
       volume = 100
     )
   }
@@ -52,6 +54,19 @@ object SequenceGenerator {
       ) {
         case ((events, partState), scoreElement) =>
           scoreElement match {
+            case Attribute.Transposition(_, value) =>
+              events -> partState.copy(
+                instrumentStates = partState.instrumentStates.updated(
+                  partState.currentVoice,
+                  partState.currentVoiceInstrumentState.copy(
+                    noteAttributes =
+                      partState.currentVoiceInstrumentState.noteAttributes.copy(
+                        transposition = value
+                      )
+                  )
+                )
+              )
+
             case Attribute.Volume(_, value) =>
               events -> partState.copy(
                 instrumentStates = partState.instrumentStates.updated(

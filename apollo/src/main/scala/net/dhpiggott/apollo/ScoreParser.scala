@@ -31,8 +31,14 @@ object ScoreParser {
 
   private[this] def attribute[_: P]: P[ScoreElement with Attribute] =
     P(
-      volumeAttribute
+      transpositionAttribute | volumeAttribute
     )
+
+  private[this] def transpositionAttribute[_: P]: P[Attribute.Transposition] =
+    P("(" ~ ("transposition" | "transpose") ~ "!".!.? ~ number ~ ")").map {
+      case (maybeGlobal, value) =>
+        Attribute.Transposition(global = maybeGlobal.isDefined, value)
+    }
 
   private[this] def volumeAttribute[_: P]: P[Attribute.Volume] =
     P("(" ~ ("volume" | "vol") ~ "!".!.? ~ number ~ ")").map {
