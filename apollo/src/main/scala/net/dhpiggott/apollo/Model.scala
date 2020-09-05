@@ -32,7 +32,18 @@ object Pitch {
 sealed abstract class ScoreElement {
   def show: String
 }
-sealed trait ChordElement
+
+sealed trait Attribute {
+  def global: Boolean
+}
+
+object Attribute {
+  final case class Volume(override val global: Boolean, value: Int)
+      extends ScoreElement
+      with Attribute {
+    def show: String = s"volume${if (global) "!" else ""}: $value"
+  }
+}
 
 final case class Voice(value: Int) extends ScoreElement {
   def show: String = s"V$value:"
@@ -46,6 +57,8 @@ final case class Chord(elements: Seq[ScoreElement with ChordElement])
 final case class Octave(value: Int) extends ScoreElement {
   def show: String = s"o$value"
 }
+
+sealed trait ChordElement
 
 case object OctaveIncrement extends ScoreElement with ChordElement {
   def show: String = ">"

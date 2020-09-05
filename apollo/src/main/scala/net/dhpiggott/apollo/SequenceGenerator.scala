@@ -14,7 +14,7 @@ object SequenceGenerator {
     val defaults: NoteAttributes = NoteAttributes(
       octave = Octave(4),
       duration = Note.Duration(4),
-      volume = 127
+      volume = 100
     )
   }
 
@@ -52,6 +52,19 @@ object SequenceGenerator {
       ) {
         case ((events, partState), scoreElement) =>
           scoreElement match {
+            case Attribute.Volume(_, value) =>
+              events -> partState.copy(
+                instrumentStates = partState.instrumentStates.updated(
+                  partState.currentVoice,
+                  partState.currentVoiceInstrumentState.copy(
+                    noteAttributes =
+                      partState.currentVoiceInstrumentState.noteAttributes.copy(
+                        volume = value
+                      )
+                  )
+                )
+              )
+
             case voice @ Voice(value) if value == 0 =>
               events -> partState.copy(
                 currentVoice = voice,
@@ -277,7 +290,7 @@ object SequenceGenerator {
           ShortMessage.NOTE_ON,
           channel,
           toneNumber,
-          noteAttributes.volume
+          ((noteAttributes.volume / 100d) * 127).toInt
         ),
         offset
       )
@@ -286,7 +299,7 @@ object SequenceGenerator {
           ShortMessage.NOTE_OFF,
           channel,
           toneNumber,
-          noteAttributes.volume
+          ((noteAttributes.volume / 100d) * 127).toInt
         ),
         offset + pulses(
           note.duration

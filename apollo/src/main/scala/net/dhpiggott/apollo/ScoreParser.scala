@@ -26,12 +26,22 @@ object ScoreParser {
 
   private[this] def scoreElement[_: P]: P[ScoreElement] =
     P(
-      voice | chord | octave | octaveIncrement | octaveDecrement | note | rest | barline
+      attribute | voice | chord | octave | octaveIncrement | octaveDecrement | note | rest | barline
     )
 
+  private[this] def attribute[_: P]: P[ScoreElement with Attribute] =
+    P(
+      volumeAttribute
+    )
+
+  private[this] def volumeAttribute[_: P]: P[Attribute.Volume] =
+    P("(" ~ ("volume" | "vol") ~ "!".!.? ~ number ~ ")").map {
+      case (maybeGlobal, value) =>
+        Attribute.Volume(global = maybeGlobal.isDefined, value)
+    }
+
   private[this] def voice[_: P]: P[Voice] =
-    P("V" ~ CharIn("0-9").rep(min = 1, sep = "").!.map(_.toInt) ~ ":")
-      .map(Voice)
+    P("V" ~ number ~ ":").map(Voice)
 
   private[this] def chord[_: P]: P[Chord] =
     P(chordElement.rep(min = 2, sep = "/")).map(Chord)
