@@ -54,6 +54,17 @@ object SequenceGenerator {
       ) {
         case ((events, partState), scoreElement) =>
           scoreElement match {
+            case Attribute.TrackVolume(_, value) =>
+              (events :+ new MidiEvent(
+                new ShortMessage(
+                  ShortMessage.CONTROL_CHANGE,
+                  channel,
+                  7,
+                  ((value / 100d) * 127).toInt
+                ),
+                partState.currentVoiceInstrumentState.offset
+              )) -> partState
+
             case Attribute.Transposition(_, value) =>
               events -> partState.copy(
                 instrumentStates = partState.instrumentStates.updated(

@@ -38,6 +38,12 @@ sealed trait Attribute {
 }
 
 object Attribute {
+  final case class TrackVolume(override val global: Boolean, value: Int)
+      extends ScoreElement
+      with Attribute {
+    def show: String = s"track-volume${if (global) "!" else ""}: $value"
+  }
+
   final case class Transposition(override val global: Boolean, value: Int)
       extends ScoreElement
       with Attribute {
