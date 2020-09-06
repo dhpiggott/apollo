@@ -37,6 +37,17 @@ object SequenceGenerator {
     val pulsesPerQuarterNote = 30
     val sequence = new Sequence(Sequence.PPQ, pulsesPerQuarterNote)
     val track = sequence.createTrack()
+    track.add(
+      new MidiEvent(
+        new ShortMessage(
+          ShortMessage.PROGRAM_CHANGE,
+          channel,
+          Instruments.nonPercusssionInstruments(part.instrument),
+          0
+        ),
+        0
+      )
+    )
     def generateMidiEvents(
         elements: Seq[ScoreElement],
         partState: PartState = PartState(

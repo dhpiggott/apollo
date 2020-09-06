@@ -23,7 +23,7 @@ object Apollo extends App {
   private[this] val program
       : RIO[Console with Has[Synthesizer] with Has[Sequencer], Unit] = for {
     part <- ScoreParser.parseScorePart(
-      """piano:
+      """oboe:
            (volume 50) V0: o4 c4. d8 r2 | (volume 75) e8 f r2. | (volume 100) c8/e4/g4 r8 a4 b > c | c2.~4 |
            V1: (tempo 60) < c8 d e f (transposition 2) f (transposition 0) a b > c |
            V2: (tempo 60) c8 < b a g f e d c |
@@ -34,26 +34,16 @@ object Apollo extends App {
       s"${part.instrument}: ${part.elements.map(_.show).mkString(" ")}"
     )
     _ <- playSequence(
-      SequenceGenerator.generateSequence(part, channel = 0),
-      instruments = Map(
-        0 -> Instruments.nonPercusssionInstruments(
-          part.instrument
-        )
-      )
+      SequenceGenerator.generateSequence(part, channel = 0)
     )
   } yield ()
 
   private[this] def playSequence(
-      sequence: Sequence,
-      instruments: Map[Int, Int]
+      sequence: Sequence
   ): RIO[Console with Has[Synthesizer] with Has[Sequencer], Unit] =
     for {
       synthesizer <- RIO.service[Synthesizer]
       sequencer <- RIO.service[Sequencer]
-      _ <- Task.foreach(instruments.toSeq) {
-        case (channel, program) =>
-          Task(synthesizer.getChannels()(channel).programChange(program))
-      }
       _ <- Task(
         sequencer.getTransmitter().setReceiver(synthesizer.getReceiver())
       )
