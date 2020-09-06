@@ -31,7 +31,7 @@ object ScoreParser {
 
   private[this] def attribute[_: P]: P[ScoreElement with Attribute] =
     P(
-      panning | tempo | trackVolume | transpositionAttribute | volumeAttribute
+      panning | quantization | tempo | trackVolume | transpositionAttribute | volumeAttribute
     )
 
   private[this] def panning[_: P]: P[Attribute.Panning] =
@@ -39,6 +39,13 @@ object ScoreParser {
       case (maybeGlobal, value) =>
         Attribute.Panning(global = maybeGlobal.isDefined, value)
     }
+
+  private[this] def quantization[_: P]: P[Attribute.Quantization] =
+    P("(" ~ ("quantization" | "quant" | "quantize") ~ "!".!.? ~ number ~ ")")
+      .map {
+        case (maybeGlobal, value) =>
+          Attribute.Quantization(global = maybeGlobal.isDefined, value)
+      }
 
   private[this] def tempo[_: P]: P[Attribute.Tempo] =
     P("(" ~ "tempo" ~ "!".!.? ~ number ~ ")").map {

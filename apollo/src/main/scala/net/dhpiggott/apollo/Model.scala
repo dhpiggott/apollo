@@ -44,6 +44,12 @@ object Attribute {
     def show: String = s"(panning${if (global) "!" else ""} $value)"
   }
 
+  final case class Quantization(override val global: Boolean, value: Int)
+      extends ScoreElement
+      with Attribute {
+    def show: String = s"(quantization${if (global) "!" else ""} $value)"
+  }
+
   final case class Tempo(override val global: Boolean, beatsPerMinute: Int)
       extends ScoreElement
       with Attribute {

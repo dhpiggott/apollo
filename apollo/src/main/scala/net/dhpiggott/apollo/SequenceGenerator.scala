@@ -7,6 +7,7 @@ object SequenceGenerator {
   final case class NoteAttributes(
       octave: Octave,
       duration: Note.Duration,
+      quantization: Int,
       transposition: Int,
       volume: Int
   )
@@ -15,6 +16,7 @@ object SequenceGenerator {
     val defaults: NoteAttributes = NoteAttributes(
       octave = Octave(4),
       duration = Note.Duration(4),
+      quantization = 90,
       transposition = 0,
       volume = 100
     )
@@ -34,7 +36,7 @@ object SequenceGenerator {
 
   // TODO: DRY
   def generateSequence(part: Part, channel: Int): Sequence = {
-    val pulsesPerQuarterNote = 30
+    val pulsesPerQuarterNote = 128
     val sequence = new Sequence(Sequence.PPQ, pulsesPerQuarterNote)
     val track = sequence.createTrack()
     track.add(
@@ -76,13 +78,28 @@ object SequenceGenerator {
                 partState.currentVoiceInstrumentState.offset
               )) -> partState
 
+            case Attribute.Quantization(_, value) =>
+              events -> partState.copy(
+                instrumentStates = partState.instrumentStates.updated(
+                  partState.currentVoice,
+                  partState.currentVoiceInstrumentState.copy(
+                    noteAttributes =
+                      partState.currentVoiceInstrumentState.noteAttributes.copy(
+                        quantization = value
+                      )
+                  )
+                )
+              )
+
             case Attribute.Tempo(_, beatsPerMinute) =>
-              val microsecondsPerQuartnerNote = 60000000 / beatsPerMinute
+              val microsecondsPerQuartnerNote =
+                BigInt(60000000 / beatsPerMinute).toByteArray
+              assert(microsecondsPerQuartnerNote.size <= 3)
               (events :+ new MidiEvent(
                 new MetaMessage(
                   0x51,
-                  BigInt(microsecondsPerQuartnerNote).toByteArray,
-                  3
+                  microsecondsPerQuartnerNote,
+                  microsecondsPerQuartnerNote.size
                 ),
                 partState.currentVoiceInstrumentState.offset
               )) -> partState
@@ -360,11 +377,13 @@ object SequenceGenerator {
           toneNumber,
           ((noteAttributes.volume / 100d) * 127).toInt
         ),
-        offset + pulses(
-          note.duration
-            .getOrElse(noteAttributes.duration),
-          pulsesPerQuarterNote * 4
-        )
+        offset +
+          ((noteAttributes.quantization / 100d) *
+            pulses(
+              note.duration
+                .getOrElse(noteAttributes.duration),
+              pulsesPerQuarterNote * 4
+            )).toLong
       )
     } yield Seq(noteOn, noteOff)).flatten
 
