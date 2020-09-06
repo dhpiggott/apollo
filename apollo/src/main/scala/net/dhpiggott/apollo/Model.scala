@@ -38,6 +38,10 @@ sealed trait Attribute {
 }
 
 object Attribute {
+  // TODO:
+  // https://github.com/alda-lang/alda/blob/master/doc/attributes.md#duration
+  // https://github.com/alda-lang/alda/blob/master/doc/attributes.md#key-signature
+
   final case class Octave(override val global: Boolean, value: Octave.Change)
       extends ScoreElement
       with Attribute {
