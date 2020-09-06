@@ -38,6 +38,27 @@ sealed trait Attribute {
 }
 
 object Attribute {
+  final case class Octave(override val global: Boolean, value: Octave.Change)
+      extends ScoreElement
+      with Attribute {
+    def show: String = s"(octave${if (global) "!" else ""} ${value.show})"
+  }
+
+  object Octave {
+    sealed abstract class Change {
+      def show: String
+    }
+    final case class AbsoluteValue(value: Int) extends Change {
+      override def show: String = s"$value"
+    }
+    case object Increment extends Change {
+      override def show: String = ":up"
+    }
+    case object Decrement extends Change {
+      override def show: String = ":down"
+    }
+  }
+
   final case class Panning(override val global: Boolean, value: Int)
       extends ScoreElement
       with Attribute {

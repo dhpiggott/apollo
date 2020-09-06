@@ -67,6 +67,32 @@ object SequenceGenerator {
       ) {
         case ((events, partState), scoreElement) =>
           scoreElement match {
+            case Attribute.Octave(_, change) =>
+              events -> partState.copy(
+                instrumentStates = partState.instrumentStates.updated(
+                  partState.currentVoice,
+                  partState.currentVoiceInstrumentState.copy(
+                    noteAttributes =
+                      partState.currentVoiceInstrumentState.noteAttributes.copy(
+                        octave = change match {
+                          case Attribute.Octave.AbsoluteValue(value) =>
+                            Octave(value)
+
+                          case Attribute.Octave.Increment =>
+                            Octave(
+                              partState.currentVoiceInstrumentState.noteAttributes.octave.value + 1
+                            )
+
+                          case Attribute.Octave.Decrement =>
+                            Octave(
+                              partState.currentVoiceInstrumentState.noteAttributes.octave.value - 1
+                            )
+                        }
+                      )
+                  )
+                )
+              )
+
             case Attribute.Panning(_, value) =>
               (events :+ new MidiEvent(
                 new ShortMessage(

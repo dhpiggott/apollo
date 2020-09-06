@@ -31,29 +31,52 @@ object ScoreParser {
 
   private[this] def attribute[_: P]: P[ScoreElement with Attribute] =
     P(
-      panning | quantization | tempo | trackVolume | transpositionAttribute | volumeAttribute
+      octaveAttribute | panningAttribute | quantizationAttribute | tempoAttribute | trackVolumeAttribute | transpositionAttribute | volumeAttribute
     )
 
-  private[this] def panning[_: P]: P[Attribute.Panning] =
+  private[this] def octaveAttribute[_: P]: P[Attribute.Octave] =
+    P("(" ~ "octave" ~ "!".!.? ~ octaveChangeAttribute ~ ")").map {
+      case (maybeGlobal, change) =>
+        Attribute.Octave(global = maybeGlobal.isDefined, change)
+    }
+
+  private[this] def octaveChangeAttribute[_: P]: P[Attribute.Octave.Change] =
+    P(
+      octaveChangeAbsoluteValueAttribute | octaveChangeIncrementAttribute | octaveChangeDecrementAttribute
+    )
+
+  private[this] def octaveChangeAbsoluteValueAttribute[_: P]
+      : P[Attribute.Octave.AbsoluteValue] =
+    number.map(Attribute.Octave.AbsoluteValue)
+
+  private[this] def octaveChangeIncrementAttribute[_: P]
+      : P[Attribute.Octave.Increment.type] =
+    P(":up").map(_ => Attribute.Octave.Increment)
+
+  private[this] def octaveChangeDecrementAttribute[_: P]
+      : P[Attribute.Octave.Decrement.type] =
+    P(":down").map(_ => Attribute.Octave.Decrement)
+
+  private[this] def panningAttribute[_: P]: P[Attribute.Panning] =
     P("(" ~ ("panning" | "pan") ~ "!".!.? ~ number ~ ")").map {
       case (maybeGlobal, value) =>
         Attribute.Panning(global = maybeGlobal.isDefined, value)
     }
 
-  private[this] def quantization[_: P]: P[Attribute.Quantization] =
+  private[this] def quantizationAttribute[_: P]: P[Attribute.Quantization] =
     P("(" ~ ("quantization" | "quant" | "quantize") ~ "!".!.? ~ number ~ ")")
       .map {
         case (maybeGlobal, value) =>
           Attribute.Quantization(global = maybeGlobal.isDefined, value)
       }
 
-  private[this] def tempo[_: P]: P[Attribute.Tempo] =
+  private[this] def tempoAttribute[_: P]: P[Attribute.Tempo] =
     P("(" ~ "tempo" ~ "!".!.? ~ number ~ ")").map {
       case (maybeGlobal, beatsPerMinute) =>
         Attribute.Tempo(global = maybeGlobal.isDefined, beatsPerMinute)
     }
 
-  private[this] def trackVolume[_: P]: P[Attribute.TrackVolume] =
+  private[this] def trackVolumeAttribute[_: P]: P[Attribute.TrackVolume] =
     P("(" ~ ("track-volume" | "track-vol") ~ "!".!.? ~ number ~ ")").map {
       case (maybeGlobal, value) =>
         Attribute.TrackVolume(global = maybeGlobal.isDefined, value)
