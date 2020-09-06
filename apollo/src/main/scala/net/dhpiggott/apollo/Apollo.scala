@@ -25,8 +25,8 @@ object Apollo extends App {
     part <- ScoreParser.parseScorePart(
       """piano:
            (volume 50) V0: o4 c4. d8 r2 | (volume 75) e8 f r2. | (volume 100) c8/e4/g4 r8 a4 b > c | c2.~4 |
-           V1: < c8 d e f (transposition 2) f (transposition 0) a b > c |
-           V2: c8 < b a g f e d c |
+           V1: (tempo 60) < c8 d e f (transposition 2) f (transposition 0) a b > c |
+           V2: (tempo 60) c8 < b a g f e d c |
            V0: (panning 100) (track-volume 50) o4 c1~1/e1~1/g1~1 |
       """
     )
@@ -61,7 +61,7 @@ object Apollo extends App {
       _ <- Task(sequencer.start())
       _ <- Task.effectAsync[Unit](callback =>
         sequencer.addMetaEventListener(metaEvent =>
-          if (metaEvent.getType() == 47) callback(UIO.unit)
+          if (metaEvent.getType() == 0x2F) callback(UIO.unit)
         )
       )
     } yield ()

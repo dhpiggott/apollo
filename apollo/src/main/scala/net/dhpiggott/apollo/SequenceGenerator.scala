@@ -65,6 +65,17 @@ object SequenceGenerator {
                 partState.currentVoiceInstrumentState.offset
               )) -> partState
 
+            case Attribute.Tempo(_, beatsPerMinute) =>
+              val microsecondsPerQuartnerNote = 60000000 / beatsPerMinute
+              (events :+ new MidiEvent(
+                new MetaMessage(
+                  0x51,
+                  BigInt(microsecondsPerQuartnerNote).toByteArray,
+                  3
+                ),
+                partState.currentVoiceInstrumentState.offset
+              )) -> partState
+
             case Attribute.TrackVolume(_, value) =>
               (events :+ new MidiEvent(
                 new ShortMessage(
