@@ -54,6 +54,17 @@ object SequenceGenerator {
       ) {
         case ((events, partState), scoreElement) =>
           scoreElement match {
+            case Attribute.Panning(_, value) =>
+              (events :+ new MidiEvent(
+                new ShortMessage(
+                  ShortMessage.CONTROL_CHANGE,
+                  channel,
+                  10,
+                  ((value / 100d) * 127).toInt
+                ),
+                partState.currentVoiceInstrumentState.offset
+              )) -> partState
+
             case Attribute.TrackVolume(_, value) =>
               (events :+ new MidiEvent(
                 new ShortMessage(

@@ -31,8 +31,14 @@ object ScoreParser {
 
   private[this] def attribute[_: P]: P[ScoreElement with Attribute] =
     P(
-      trackVolume | transpositionAttribute | volumeAttribute
+      panning | trackVolume | transpositionAttribute | volumeAttribute
     )
+
+  private[this] def panning[_: P]: P[Attribute.Panning] =
+    P("(" ~ ("panning" | "pan") ~ "!".!.? ~ number ~ ")").map {
+      case (maybeGlobal, value) =>
+        Attribute.Panning(global = maybeGlobal.isDefined, value)
+    }
 
   private[this] def trackVolume[_: P]: P[Attribute.TrackVolume] =
     P("(" ~ ("track-volume" | "track-vol") ~ "!".!.? ~ number ~ ")").map {

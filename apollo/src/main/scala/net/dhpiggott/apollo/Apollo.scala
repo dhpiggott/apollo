@@ -27,7 +27,7 @@ object Apollo extends App {
            (volume 50) V0: o4 c4. d8 r2 | (volume 75) e8 f r2. | (volume 100) c8/e4/g4 r8 a4 b > c | c2.~4 |
            V1: < c8 d e f (transposition 2) f (transposition 0) a b > c |
            V2: c8 < b a g f e d c |
-           V0: (track-volume 50) o4 c1~1/e1~1/g1~1 |
+           V0: (panning 100) (track-volume 50) o4 c1~1/e1~1/g1~1 |
       """
     )
     _ <- putStrLn(

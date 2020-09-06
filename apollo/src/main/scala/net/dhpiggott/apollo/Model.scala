@@ -38,22 +38,28 @@ sealed trait Attribute {
 }
 
 object Attribute {
+  final case class Panning(override val global: Boolean, value: Int)
+      extends ScoreElement
+      with Attribute {
+    def show: String = s"(panning${if (global) "!" else ""} $value)"
+  }
+
   final case class TrackVolume(override val global: Boolean, value: Int)
       extends ScoreElement
       with Attribute {
-    def show: String = s"track-volume${if (global) "!" else ""}: $value"
+    def show: String = s"(track-volume${if (global) "!" else ""} $value)"
   }
 
   final case class Transposition(override val global: Boolean, value: Int)
       extends ScoreElement
       with Attribute {
-    def show: String = s"transposition${if (global) "!" else ""}: $value"
+    def show: String = s"(transposition${if (global) "!" else ""} $value)"
   }
 
   final case class Volume(override val global: Boolean, value: Int)
       extends ScoreElement
       with Attribute {
-    def show: String = s"volume${if (global) "!" else ""}: $value"
+    def show: String = s"(volume${if (global) "!" else ""} $value)"
   }
 }
 
