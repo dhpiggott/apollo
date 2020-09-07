@@ -8,15 +8,18 @@ object SequenceGenerator {
       octave: Octave,
       duration: Note.Duration,
       quantization: Int,
+      tempo: Int,
       transposition: Int,
       volume: Int
   )
 
   object NoteAttributes {
+    // TODO: Initialize sequence using these value
     val defaults: NoteAttributes = NoteAttributes(
       octave = Octave(4),
       duration = Note.Duration(4),
       quantization = 90,
+      tempo = 120,
       transposition = 0,
       volume = 100
     )
@@ -67,14 +70,43 @@ object SequenceGenerator {
       ) {
         case ((events, partState), scoreElement) =>
           scoreElement match {
-            case Attribute.Octave(_, change) =>
+            case Attribute.Duration(_, value) =>
               events -> partState.copy(
                 instrumentStates = partState.instrumentStates.updated(
                   partState.currentVoice,
                   partState.currentVoiceInstrumentState.copy(
                     noteAttributes =
                       partState.currentVoiceInstrumentState.noteAttributes.copy(
-                        octave = change match {
+                        duration = Note.Duration(
+                          value match {
+                            case Attribute.Duration.Beats(value) =>
+                              value / 4
+
+                            case Attribute.Duration.NoteLength(denominator) =>
+                              1d / denominator
+
+                            case Attribute.Duration.Milliseconds(value) =>
+                              val bpm =
+                                partState.currentVoiceInstrumentState.noteAttributes.tempo
+                              val bps = bpm / 60d
+                              val seconds = value / 1000d
+                              val beats = seconds * bps
+                              beats / 4
+                          }
+                        )
+                      )
+                  )
+                )
+              )
+
+            case Attribute.Octave(_, value) =>
+              events -> partState.copy(
+                instrumentStates = partState.instrumentStates.updated(
+                  partState.currentVoice,
+                  partState.currentVoiceInstrumentState.copy(
+                    noteAttributes =
+                      partState.currentVoiceInstrumentState.noteAttributes.copy(
+                        octave = value match {
                           case Attribute.Octave.AbsoluteValue(value) =>
                             Octave(value)
 
@@ -128,7 +160,17 @@ object SequenceGenerator {
                   microsecondsPerQuartnerNote.size
                 ),
                 partState.currentVoiceInstrumentState.offset
-              )) -> partState
+              )) -> partState.copy(
+                instrumentStates = partState.instrumentStates.updated(
+                  partState.currentVoice,
+                  partState.currentVoiceInstrumentState.copy(
+                    noteAttributes =
+                      partState.currentVoiceInstrumentState.noteAttributes.copy(
+                        tempo = beatsPerMinute
+                      )
+                  )
+                )
+              )
 
             case Attribute.TrackVolume(_, value) =>
               (events :+ new MidiEvent(

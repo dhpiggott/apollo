@@ -38,27 +38,46 @@ sealed trait Attribute {
 }
 
 object Attribute {
-  // TODO:
-  // https://github.com/alda-lang/alda/blob/master/doc/attributes.md#duration
-  // https://github.com/alda-lang/alda/blob/master/doc/attributes.md#key-signature
+  final case class Duration(override val global: Boolean, value: Duration.Value)
+      extends ScoreElement
+      with Attribute {
+    def show: String = s"(set-duration${if (global) "!" else ""} ${value.show})"
+  }
 
-  final case class Octave(override val global: Boolean, value: Octave.Change)
+  object Duration {
+    sealed abstract class Value {
+      def show: String
+    }
+    final case class Beats(value: Double) extends Value {
+      override def show: String = s"$value"
+    }
+    final case class NoteLength(value: Int) extends Value {
+      override def show: String = s"$value"
+    }
+    final case class Milliseconds(value: Int) extends Value {
+      override def show: String = s"$value"
+    }
+  }
+
+  // TODO: https://github.com/alda-lang/alda/blob/master/doc/attributes.md#key-signature
+
+  final case class Octave(override val global: Boolean, value: Octave.Value)
       extends ScoreElement
       with Attribute {
     def show: String = s"(octave${if (global) "!" else ""} ${value.show})"
   }
 
   object Octave {
-    sealed abstract class Change {
+    sealed abstract class Value {
       def show: String
     }
-    final case class AbsoluteValue(value: Int) extends Change {
+    final case class AbsoluteValue(value: Int) extends Value {
       override def show: String = s"$value"
     }
-    case object Increment extends Change {
+    case object Increment extends Value {
       override def show: String = ":up"
     }
-    case object Decrement extends Change {
+    case object Decrement extends Value {
       override def show: String = ":down"
     }
   }

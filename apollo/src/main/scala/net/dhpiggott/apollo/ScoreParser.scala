@@ -31,71 +31,93 @@ object ScoreParser {
 
   private[this] def attribute[_: P]: P[ScoreElement with Attribute] =
     P(
-      octaveAttribute | panningAttribute | quantizationAttribute | tempoAttribute | trackVolumeAttribute | transpositionAttribute | volumeAttribute
+      durationAttribute | octaveAttribute | panningAttribute | quantizationAttribute | tempoAttribute | trackVolumeAttribute | transpositionAttribute | volumeAttribute
     )
 
-  private[this] def octaveAttribute[_: P]: P[Attribute.Octave] =
-    P("(" ~ "octave" ~ "!".!.? ~ octaveChangeAttribute ~ ")").map {
-      case (maybeGlobal, change) =>
-        Attribute.Octave(global = maybeGlobal.isDefined, change)
+  private[this] def durationAttribute[_: P]: P[Attribute.Duration] =
+    P("(" ~ "set-duration" ~ "!".!.? ~ durationValueAttribute ~ ")").map {
+      case (maybeGlobal, value) =>
+        Attribute.Duration(global = maybeGlobal.isDefined, value)
     }
 
-  private[this] def octaveChangeAttribute[_: P]: P[Attribute.Octave.Change] =
+  private[this] def durationValueAttribute[_: P]: P[Attribute.Duration.Value] =
     P(
-      octaveChangeAbsoluteValueAttribute | octaveChangeIncrementAttribute | octaveChangeDecrementAttribute
+      durationBeatsAttribute | durationNoteLengthAttribute | durationMillisecondsAttribute
     )
 
-  private[this] def octaveChangeAbsoluteValueAttribute[_: P]
-      : P[Attribute.Octave.AbsoluteValue] =
-    number.map(Attribute.Octave.AbsoluteValue)
+  private[this] def durationBeatsAttribute[_: P]: P[Attribute.Duration.Beats] =
+    double.map(Attribute.Duration.Beats)
 
-  private[this] def octaveChangeIncrementAttribute[_: P]
+  private[this] def durationNoteLengthAttribute[_: P]
+      : P[Attribute.Duration.NoteLength] =
+    P("(" ~ "note-length" ~ int ~ ")").map(Attribute.Duration.NoteLength)
+
+  private[this] def durationMillisecondsAttribute[_: P]
+      : P[Attribute.Duration.Milliseconds] =
+    P("(" ~ "ms" ~ int ~ ")").map(Attribute.Duration.Milliseconds)
+
+  private[this] def octaveAttribute[_: P]: P[Attribute.Octave] =
+    P("(" ~ "octave" ~ "!".!.? ~ octaveValueAttribute ~ ")").map {
+      case (maybeGlobal, value) =>
+        Attribute.Octave(global = maybeGlobal.isDefined, value)
+    }
+
+  private[this] def octaveValueAttribute[_: P]: P[Attribute.Octave.Value] =
+    P(
+      octaveAbsoluteValueAttribute | octaveIncrementAttribute | octaveDecrementAttribute
+    )
+
+  private[this] def octaveAbsoluteValueAttribute[_: P]
+      : P[Attribute.Octave.AbsoluteValue] =
+    int.map(Attribute.Octave.AbsoluteValue)
+
+  private[this] def octaveIncrementAttribute[_: P]
       : P[Attribute.Octave.Increment.type] =
     P(":up").map(_ => Attribute.Octave.Increment)
 
-  private[this] def octaveChangeDecrementAttribute[_: P]
+  private[this] def octaveDecrementAttribute[_: P]
       : P[Attribute.Octave.Decrement.type] =
     P(":down").map(_ => Attribute.Octave.Decrement)
 
   private[this] def panningAttribute[_: P]: P[Attribute.Panning] =
-    P("(" ~ ("panning" | "pan") ~ "!".!.? ~ number ~ ")").map {
+    P("(" ~ ("panning" | "pan") ~ "!".!.? ~ int ~ ")").map {
       case (maybeGlobal, value) =>
         Attribute.Panning(global = maybeGlobal.isDefined, value)
     }
 
   private[this] def quantizationAttribute[_: P]: P[Attribute.Quantization] =
-    P("(" ~ ("quantization" | "quant" | "quantize") ~ "!".!.? ~ number ~ ")")
+    P("(" ~ ("quantization" | "quant" | "quantize") ~ "!".!.? ~ int ~ ")")
       .map {
         case (maybeGlobal, value) =>
           Attribute.Quantization(global = maybeGlobal.isDefined, value)
       }
 
   private[this] def tempoAttribute[_: P]: P[Attribute.Tempo] =
-    P("(" ~ "tempo" ~ "!".!.? ~ number ~ ")").map {
+    P("(" ~ "tempo" ~ "!".!.? ~ int ~ ")").map {
       case (maybeGlobal, beatsPerMinute) =>
         Attribute.Tempo(global = maybeGlobal.isDefined, beatsPerMinute)
     }
 
   private[this] def trackVolumeAttribute[_: P]: P[Attribute.TrackVolume] =
-    P("(" ~ ("track-volume" | "track-vol") ~ "!".!.? ~ number ~ ")").map {
+    P("(" ~ ("track-volume" | "track-vol") ~ "!".!.? ~ int ~ ")").map {
       case (maybeGlobal, value) =>
         Attribute.TrackVolume(global = maybeGlobal.isDefined, value)
     }
 
   private[this] def transpositionAttribute[_: P]: P[Attribute.Transposition] =
-    P("(" ~ ("transposition" | "transpose") ~ "!".!.? ~ number ~ ")").map {
+    P("(" ~ ("transposition" | "transpose") ~ "!".!.? ~ int ~ ")").map {
       case (maybeGlobal, value) =>
         Attribute.Transposition(global = maybeGlobal.isDefined, value)
     }
 
   private[this] def volumeAttribute[_: P]: P[Attribute.Volume] =
-    P("(" ~ ("volume" | "vol") ~ "!".!.? ~ number ~ ")").map {
+    P("(" ~ ("volume" | "vol") ~ "!".!.? ~ int ~ ")").map {
       case (maybeGlobal, value) =>
         Attribute.Volume(global = maybeGlobal.isDefined, value)
     }
 
   private[this] def voice[_: P]: P[Voice] =
-    P("V" ~ number ~ ":").map(Voice)
+    P("V" ~ int ~ ":").map(Voice)
 
   private[this] def chord[_: P]: P[Chord] =
     P(chordElement.rep(min = 2, sep = "/")).map(Chord)
@@ -104,7 +126,7 @@ object ScoreParser {
     P(octaveIncrement | octaveDecrement | note | rest)
 
   private[this] def octave[_: P]: P[Octave] =
-    P("o" ~ number).map(Octave)
+    P("o" ~ int).map(Octave)
 
   private[this] def octaveIncrement[_: P]: P[OctaveIncrement.type] =
     P(">").map(_ => OctaveIncrement)
@@ -146,7 +168,7 @@ object ScoreParser {
       .map(noteDurations => Note.Duration(noteDurations.map(_.value).sum))
 
   private[this] def noteDuration[_: P]: P[Note.Duration] =
-    P(number ~ P(".").!.rep(sep = "")).map {
+    P(int ~ P(".").!.rep(sep = "")).map {
       case (denominator, dots) =>
         Note.Duration(
           (1d / denominator) + dots.zipWithIndex.map {
@@ -156,7 +178,10 @@ object ScoreParser {
         )
     }
 
-  private[this] def number[_: P]: P[Int] =
+  private[this] def int[_: P]: P[Int] =
     P(CharIn("0-9").rep(min = 1, sep = "").!.map(_.toInt))
+
+  private[this] def double[_: P]: P[Double] =
+    P(CharIn("0-9.").rep(min = 1, sep = "").!.map(_.toDouble))
 
 }
