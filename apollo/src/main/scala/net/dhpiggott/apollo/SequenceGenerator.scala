@@ -4,7 +4,28 @@ import javax.sound.midi._
 
 object SequenceGenerator {
 
-  final case class NoteAttributes(
+  final case class PartState(
+      currentVoice: Voice,
+      instrumentStates: Map[Voice, InstrumentState]
+  ) {
+
+    def currentVoiceInstrumentState: InstrumentState =
+      instrumentStates(currentVoice)
+
+    def modifyCurrentVoiceInstrumentState(
+        f: InstrumentState => InstrumentState
+    ): PartState =
+      copy(instrumentStates =
+        instrumentStates.updated(
+          currentVoice,
+          f(currentVoiceInstrumentState)
+        )
+      )
+
+  }
+
+  final case class InstrumentState(
+      offset: Long,
       octave: Octave,
       duration: Note.Duration,
       quantization: Int,
@@ -13,9 +34,10 @@ object SequenceGenerator {
       volume: Int
   )
 
-  object NoteAttributes {
-    // TODO: Initialize sequence using these value
-    val defaults: NoteAttributes = NoteAttributes(
+  object InstrumentState {
+    // TODO: Initialize sequence using these values
+    val defaults: InstrumentState = InstrumentState(
+      offset = 0,
       octave = Octave(4),
       duration = Note.Duration(4),
       quantization = 90,
@@ -25,19 +47,6 @@ object SequenceGenerator {
     )
   }
 
-  final case class PartState(
-      currentVoice: Voice,
-      instrumentStates: Map[Voice, InstrumentState]
-  ) {
-    def currentVoiceInstrumentState = instrumentStates(currentVoice)
-  }
-
-  final case class InstrumentState(
-      offset: Long,
-      noteAttributes: NoteAttributes
-  )
-
-  // TODO: DRY
   def generateSequence(part: Part, channel: Int): Sequence = {
     val pulsesPerQuarterNote = 128
     val sequence = new Sequence(Sequence.PPQ, pulsesPerQuarterNote)
@@ -58,10 +67,7 @@ object SequenceGenerator {
         partState: PartState = PartState(
           currentVoice = Voice(0),
           instrumentStates = Map(
-            Voice(0) -> InstrumentState(
-              offset = 0L,
-              NoteAttributes.defaults
-            )
+            Voice(0) -> InstrumentState.defaults
           )
         )
     ): (Seq[MidiEvent], PartState) =
@@ -71,58 +77,44 @@ object SequenceGenerator {
         case ((events, partState), scoreElement) =>
           scoreElement match {
             case Attribute.Duration(_, value) =>
-              events -> partState.copy(
-                instrumentStates = partState.instrumentStates.updated(
-                  partState.currentVoice,
-                  partState.currentVoiceInstrumentState.copy(
-                    noteAttributes =
-                      partState.currentVoiceInstrumentState.noteAttributes.copy(
-                        duration = Note.Duration(
-                          value match {
-                            case Attribute.Duration.Beats(value) =>
-                              value / 4
+              events -> partState.modifyCurrentVoiceInstrumentState(
+                instrumentState =>
+                  instrumentState.copy(
+                    duration = Note.Duration(
+                      value match {
+                        case Attribute.Duration.Beats(value) =>
+                          value / 4
 
-                            case Attribute.Duration.NoteLength(denominator) =>
-                              1d / denominator
+                        case Attribute.Duration.NoteLength(denominator) =>
+                          1d / denominator
 
-                            case Attribute.Duration.Milliseconds(value) =>
-                              val bpm =
-                                partState.currentVoiceInstrumentState.noteAttributes.tempo
-                              val bps = bpm / 60d
-                              val seconds = value / 1000d
-                              val beats = seconds * bps
-                              beats / 4
-                          }
-                        )
-                      )
+                        case Attribute.Duration.Milliseconds(value) =>
+                          val bpm =
+                            instrumentState.tempo
+                          val bps = bpm / 60d
+                          val seconds = value / 1000d
+                          val beats = seconds * bps
+                          beats / 4
+                      }
+                    )
                   )
-                )
               )
 
             case Attribute.Octave(_, value) =>
-              events -> partState.copy(
-                instrumentStates = partState.instrumentStates.updated(
-                  partState.currentVoice,
-                  partState.currentVoiceInstrumentState.copy(
-                    noteAttributes =
-                      partState.currentVoiceInstrumentState.noteAttributes.copy(
-                        octave = value match {
-                          case Attribute.Octave.AbsoluteValue(value) =>
-                            Octave(value)
+              events -> partState.modifyCurrentVoiceInstrumentState(
+                instrumentState =>
+                  instrumentState.copy(
+                    octave = value match {
+                      case Attribute.Octave.AbsoluteValue(value) =>
+                        Octave(value)
 
-                          case Attribute.Octave.Increment =>
-                            Octave(
-                              partState.currentVoiceInstrumentState.noteAttributes.octave.value + 1
-                            )
+                      case Attribute.Octave.Increment =>
+                        Octave(instrumentState.octave.value + 1)
 
-                          case Attribute.Octave.Decrement =>
-                            Octave(
-                              partState.currentVoiceInstrumentState.noteAttributes.octave.value - 1
-                            )
-                        }
-                      )
+                      case Attribute.Octave.Decrement =>
+                        Octave(instrumentState.octave.value - 1)
+                    }
                   )
-                )
               )
 
             case Attribute.Panning(_, value) =>
@@ -137,15 +129,9 @@ object SequenceGenerator {
               )) -> partState
 
             case Attribute.Quantization(_, value) =>
-              events -> partState.copy(
-                instrumentStates = partState.instrumentStates.updated(
-                  partState.currentVoice,
-                  partState.currentVoiceInstrumentState.copy(
-                    noteAttributes =
-                      partState.currentVoiceInstrumentState.noteAttributes.copy(
-                        quantization = value
-                      )
-                  )
+              events -> partState.modifyCurrentVoiceInstrumentState(
+                _.copy(
+                  quantization = value
                 )
               )
 
@@ -160,15 +146,9 @@ object SequenceGenerator {
                   microsecondsPerQuartnerNote.size
                 ),
                 partState.currentVoiceInstrumentState.offset
-              )) -> partState.copy(
-                instrumentStates = partState.instrumentStates.updated(
-                  partState.currentVoice,
-                  partState.currentVoiceInstrumentState.copy(
-                    noteAttributes =
-                      partState.currentVoiceInstrumentState.noteAttributes.copy(
-                        tempo = beatsPerMinute
-                      )
-                  )
+              )) -> partState.modifyCurrentVoiceInstrumentState(
+                _.copy(
+                  tempo = beatsPerMinute
                 )
               )
 
@@ -184,28 +164,16 @@ object SequenceGenerator {
               )) -> partState
 
             case Attribute.Transposition(_, value) =>
-              events -> partState.copy(
-                instrumentStates = partState.instrumentStates.updated(
-                  partState.currentVoice,
-                  partState.currentVoiceInstrumentState.copy(
-                    noteAttributes =
-                      partState.currentVoiceInstrumentState.noteAttributes.copy(
-                        transposition = value
-                      )
-                  )
+              events -> partState.modifyCurrentVoiceInstrumentState(
+                _.copy(
+                  transposition = value
                 )
               )
 
             case Attribute.Volume(_, value) =>
-              events -> partState.copy(
-                instrumentStates = partState.instrumentStates.updated(
-                  partState.currentVoice,
-                  partState.currentVoiceInstrumentState.copy(
-                    noteAttributes =
-                      partState.currentVoiceInstrumentState.noteAttributes.copy(
-                        volume = value
-                      )
-                  )
+              events -> partState.modifyCurrentVoiceInstrumentState(
+                _.copy(
+                  volume = value
                 )
               )
 
@@ -246,13 +214,11 @@ object SequenceGenerator {
             // https://github.com/alda-lang/alda/blob/master/doc/chords.md
             case Chord(elements) =>
               def resetOffset(chordPartState: PartState): PartState =
-                chordPartState.copy(
-                  instrumentStates = chordPartState.instrumentStates.updated(
-                    chordPartState.currentVoice,
-                    chordPartState.currentVoiceInstrumentState.copy(
+                chordPartState.modifyCurrentVoiceInstrumentState(
+                  instrumentState =>
+                    instrumentState.copy(
                       offset = partState.currentVoiceInstrumentState.offset
                     )
-                  )
                 )
 
               val (chordEvents, updatedChordPartState, shortestNoteDuration) =
@@ -260,7 +226,7 @@ object SequenceGenerator {
                   (
                     Seq.empty[MidiEvent],
                     partState,
-                    partState.currentVoiceInstrumentState.noteAttributes.duration
+                    partState.currentVoiceInstrumentState.duration
                   )
                 ) {
                   case (
@@ -293,63 +259,37 @@ object SequenceGenerator {
                       updatedShortestNoteDuration
                     )
                 }
-              events ++ chordEvents ->
-                updatedChordPartState.copy(
-                  instrumentStates =
-                    updatedChordPartState.instrumentStates.updated(
-                      updatedChordPartState.currentVoice,
-                      updatedChordPartState.currentVoiceInstrumentState.copy(
-                        offset =
-                          updatedChordPartState.currentVoiceInstrumentState.offset +
-                            pulses(
-                              shortestNoteDuration,
-                              pulsesPerQuarterNote * 4
-                            )
-                      )
+              events ++ chordEvents -> updatedChordPartState
+                .modifyCurrentVoiceInstrumentState(instrumentState =>
+                  instrumentState.copy(
+                    offset = instrumentState.offset + pulses(
+                      shortestNoteDuration,
+                      pulsesPerQuarterNote * 4
                     )
+                  )
                 )
 
             case octave: Octave =>
-              events -> partState.copy(
-                instrumentStates = partState.instrumentStates.updated(
-                  partState.currentVoice,
-                  partState.currentVoiceInstrumentState.copy(
-                    noteAttributes =
-                      partState.currentVoiceInstrumentState.noteAttributes.copy(
-                        octave = octave
-                      )
-                  )
+              events -> partState.modifyCurrentVoiceInstrumentState(
+                _.copy(
+                  octave = octave
                 )
               )
 
             case OctaveIncrement =>
-              events -> partState.copy(
-                instrumentStates = partState.instrumentStates.updated(
-                  partState.currentVoice,
-                  partState.currentVoiceInstrumentState.copy(
-                    noteAttributes =
-                      partState.currentVoiceInstrumentState.noteAttributes.copy(
-                        octave = Octave(
-                          partState.currentVoiceInstrumentState.noteAttributes.octave.value + 1
-                        )
-                      )
+              events -> partState.modifyCurrentVoiceInstrumentState(
+                instrumentState =>
+                  instrumentState.copy(
+                    octave = Octave(instrumentState.octave.value + 1)
                   )
-                )
               )
 
             case OctaveDecrement =>
-              events -> partState.copy(
-                instrumentStates = partState.instrumentStates.updated(
-                  partState.currentVoice,
-                  partState.currentVoiceInstrumentState.copy(
-                    noteAttributes =
-                      partState.currentVoiceInstrumentState.noteAttributes.copy(
-                        octave = Octave(
-                          partState.currentVoiceInstrumentState.noteAttributes.octave.value - 1
-                        )
-                      )
+              events -> partState.modifyCurrentVoiceInstrumentState(
+                instrumentState =>
+                  instrumentState.copy(
+                    octave = Octave(instrumentState.octave.value - 1)
                   )
-                )
               )
 
             case note: Note =>
@@ -358,55 +298,41 @@ object SequenceGenerator {
                 Seq(note),
                 channel,
                 pulsesPerQuarterNote,
-                partState.currentVoiceInstrumentState.noteAttributes
+                partState.currentVoiceInstrumentState
               ) ->
-                partState.copy(
-                  instrumentStates = partState.instrumentStates.updated(
-                    partState.currentVoice,
-                    partState.currentVoiceInstrumentState.copy(
-                      offset = partState.currentVoiceInstrumentState.offset +
-                        pulses(
-                          note.duration
-                            .getOrElse(
-                              partState.currentVoiceInstrumentState.noteAttributes.duration
-                            ),
-                          pulsesPerQuarterNote * 4
-                        ),
-                      noteAttributes =
-                        partState.currentVoiceInstrumentState.noteAttributes
-                          .copy(
-                            duration = note.duration
-                              .getOrElse(
-                                partState.currentVoiceInstrumentState.noteAttributes.duration
-                              )
-                          )
-                    )
+                partState.modifyCurrentVoiceInstrumentState(instrumentState =>
+                  instrumentState.copy(
+                    offset = instrumentState.offset +
+                      pulses(
+                        note.duration
+                          .getOrElse(
+                            instrumentState.duration
+                          ),
+                        pulsesPerQuarterNote * 4
+                      ),
+                    duration = note.duration
+                      .getOrElse(
+                        instrumentState.duration
+                      )
                   )
                 )
 
             case Rest(noteLength) =>
               events ->
-                partState.copy(
-                  instrumentStates = partState.instrumentStates.updated(
-                    partState.currentVoice,
-                    partState.currentVoiceInstrumentState.copy(
-                      offset = partState.currentVoiceInstrumentState.offset +
-                        pulses(
-                          noteLength
-                            .getOrElse(
-                              partState.currentVoiceInstrumentState.noteAttributes.duration
-                            ),
-                          pulsesPerQuarterNote * 4
-                        ),
-                      noteAttributes =
-                        partState.currentVoiceInstrumentState.noteAttributes
-                          .copy(
-                            duration = noteLength
-                              .getOrElse(
-                                partState.currentVoiceInstrumentState.noteAttributes.duration
-                              )
-                          )
-                    )
+                partState.modifyCurrentVoiceInstrumentState(instrumentState =>
+                  instrumentState.copy(
+                    offset = instrumentState.offset +
+                      pulses(
+                        noteLength
+                          .getOrElse(
+                            instrumentState.duration
+                          ),
+                        pulsesPerQuarterNote * 4
+                      ),
+                    duration = noteLength
+                      .getOrElse(
+                        instrumentState.duration
+                      )
                   )
                 )
 
@@ -424,17 +350,17 @@ object SequenceGenerator {
       notes: Seq[Note],
       channel: Int,
       pulsesPerQuarterNote: Int,
-      noteAttributes: NoteAttributes
+      instrumentState: InstrumentState
   ): Seq[MidiEvent] =
     (for {
       note <- notes
-      toneNumber = (noteAttributes.octave.value + 1) * 12 + note.pitch.chroma
+      toneNumber = (instrumentState.octave.value + 1) * 12 + note.pitch.chroma
       noteOn = new MidiEvent(
         new ShortMessage(
           ShortMessage.NOTE_ON,
           channel,
           toneNumber,
-          ((noteAttributes.volume / 100d) * 127).toInt
+          ((instrumentState.volume / 100d) * 127).toInt
         ),
         offset
       )
@@ -443,13 +369,13 @@ object SequenceGenerator {
           ShortMessage.NOTE_OFF,
           channel,
           toneNumber,
-          ((noteAttributes.volume / 100d) * 127).toInt
+          ((instrumentState.volume / 100d) * 127).toInt
         ),
         offset +
-          ((noteAttributes.quantization / 100d) *
+          ((instrumentState.quantization / 100d) *
             pulses(
               note.duration
-                .getOrElse(noteAttributes.duration),
+                .getOrElse(instrumentState.duration),
               pulsesPerQuarterNote * 4
             )).toLong
       )
