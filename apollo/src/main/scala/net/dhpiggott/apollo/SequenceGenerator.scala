@@ -17,8 +17,7 @@ object SequenceGenerator {
         f: InstrumentState => InstrumentState
     ): PartState =
       copy(
-        instrumentStates =
-        instrumentStates.updated(
+        instrumentStates = instrumentStates.updated(
           currentVoice,
           f(currentVoiceInstrumentState)
         )
