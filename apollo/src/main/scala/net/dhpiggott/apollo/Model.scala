@@ -165,4 +165,12 @@ case object Barline extends ScoreElement {
   def show: String = "|"
 }
 
+final case class Marker(name: String) extends ScoreElement {
+  def show: String = s"@$name"
+}
+
+final case class MarkerReference(marker: Marker) extends ScoreElement {
+  def show: String = s"%${marker.name}"
+}
+
 final case class Part(instrument: String, elements: Seq[ScoreElement])

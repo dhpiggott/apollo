@@ -6,7 +6,8 @@ object SequenceGenerator {
 
   final case class PartState(
       currentVoice: Voice,
-      instrumentStates: Map[Voice, InstrumentState]
+      instrumentStates: Map[Voice, InstrumentState],
+      markers: Map[Marker, Long]
   ) {
 
     def currentVoiceInstrumentState: InstrumentState =
@@ -15,7 +16,8 @@ object SequenceGenerator {
     def modifyCurrentVoiceInstrumentState(
         f: InstrumentState => InstrumentState
     ): PartState =
-      copy(instrumentStates =
+      copy(
+        instrumentStates =
         instrumentStates.updated(
           currentVoice,
           f(currentVoiceInstrumentState)
@@ -68,7 +70,8 @@ object SequenceGenerator {
           currentVoice = Voice(0),
           instrumentStates = Map(
             Voice(0) -> InstrumentState.defaults
-          )
+          ),
+          markers = Map.empty
         )
     ): (Seq[MidiEvent], PartState) =
       elements.foldLeft(
@@ -209,7 +212,7 @@ object SequenceGenerator {
                   )
               )
 
-            // FIXME: Check we carry octave/duration/volume changes in the same
+            // TODO: Check we carry octave/duration/volume changes in the same
             // way that Alda does, per
             // https://github.com/alda-lang/alda/blob/master/doc/chords.md
             case Chord(elements) =>
@@ -338,6 +341,23 @@ object SequenceGenerator {
 
             case Barline =>
               events -> partState
+
+            case marker: Marker =>
+              events -> partState.copy(
+                markers = partState.markers.updated(
+                  marker,
+                  partState.currentVoiceInstrumentState.offset
+                )
+              )
+
+            case MarkerReference(marker) =>
+              // TODO: Better error messages
+              val offset = partState.markers(marker)
+              events -> partState.modifyCurrentVoiceInstrumentState(
+                _.copy(
+                  offset = offset
+                )
+              )
           }
       }
     val (events, _) = generateMidiEvents(part.elements)

@@ -6,10 +6,6 @@ import zio._
 import zio.console._
 
 // TODO: Review
-// https://github.com/alda-lang/alda-core/tree/master/src/alda/lisp,
-// https://github.com/alda-lang/alda-core/blob/master/src/alda/lisp/score.clj,
-// https://github.com/alda-lang/alda-core/blob/master/src/alda/lisp/score/part.clj
-// and
 // https://github.com/alda-lang/alda-server-clj/blob/master/src/alda/worker.clj,
 // https://github.com/alda-lang/alda-server-clj/blob/master/src/alda/server.clj
 // and
@@ -24,10 +20,12 @@ object Apollo extends App {
       : RIO[Console with Has[Synthesizer] with Has[Sequencer], Unit] = for {
     part <- ScoreParser.parseScorePart(
       """oboe:
-           (volume 50) V0: o4 c4. d8 r2 | (volume 75) e8 f r2. | (volume 100) c8/e4/g4 r8 a4 b (octave :up) c | c2.~4 |
-           V1: (quantization 50) (tempo 240) (set-duration 0.5) (octave :down) c8 d e f (transposition 2) f (transposition 0) a b > c |
+               (volume 50) V0: o4 c4. d8 r2 | (volume 75) e8 f r2. | (volume 100) c8/e4/g4 r8 a4 b (octave :up) c | c2.~4 |
+           V1: (quantization 50) (tempo 240) (set-duration 0.5) (octave :down) c d e f (transposition 2) f (transposition 0) a b > c |
            V2: (quantization 50) (tempo 240) (set-duration (note-length 8)) c < b a g f e d c |
-           V0: (panning 100) (track-volume 50) (octave 4) (set-duration (ms 5000)) c/e/g |
+           V0: %steps c d e f g a b > c |
+               @steps c < b a g f e d c |
+               (panning 100) (track-volume 50) (octave 4) (set-duration (ms 5000)) c/e/g |
       """
     )
     _ <- putStrLn(
