@@ -119,6 +119,11 @@ object Attribute {
   }
 }
 
+final case class Repeat(sequence: Sequence, repetitions: Int)
+    extends ScoreElement {
+  def show: String = s"${sequence.show}*$repetitions"
+}
+
 final case class Sequence(elements: Seq[ScoreElement]) extends ScoreElement {
   def show: String = s"[${elements.map(_.show).mkString(" ")}]"
 }

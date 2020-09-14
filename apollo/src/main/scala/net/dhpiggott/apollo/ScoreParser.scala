@@ -20,7 +20,7 @@ object ScoreParser {
     durationAttribute | octaveAttribute | panningAttribute |
       quantizationAttribute | tempoAttribute | trackVolumeAttribute |
       transpositionAttribute | volumeAttribute |
-      sequence | voice | chord | octave | octaveIncrement | octaveDecrement | note |
+      repeat | sequence | voice | chord | octave | octaveIncrement | octaveDecrement | note |
       rest | barline | marker | markerReference
 
   private[this] def durationAttribute[_: P]: P[Attribute.Duration] =
@@ -103,8 +103,13 @@ object ScoreParser {
         (maybeGlobal.isDefined, value)
     }
 
+  private[this] def repeat[_: P]: P[Repeat] =
+    P(sequence ~ P("*") ~/ int).map(
+      (Repeat.apply _).tupled
+    )
+
   private[this] def sequence[_: P]: P[Sequence] =
-    P("[" ~/ scoreElement.rep ~/ "]").map(Sequence)
+    P("[" ~ scoreElement.rep ~ "]").map(Sequence)
 
   private[this] def voice[_: P]: P[Voice] =
     P("V" ~ int ~/ ":").map(Voice)

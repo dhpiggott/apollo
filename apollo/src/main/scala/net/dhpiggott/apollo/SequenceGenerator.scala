@@ -179,6 +179,18 @@ object SequenceGenerator {
                 )
               )
 
+            case Repeat(sequence, repetitions) =>
+              Seq
+                .fill(repetitions)(sequence)
+                .foldLeft(
+                  (events, partState)
+                ) {
+                  case ((events, partState), sequence) =>
+                    val (sequenceEvents, updatedPartState) =
+                      generateMidiEvents(Seq(sequence), partState)
+                    events ++ sequenceEvents -> updatedPartState
+                }
+
             case net.dhpiggott.apollo.Sequence(elements) =>
               val (sequenceEvents, updatedPartState) =
                 generateMidiEvents(elements, partState)
