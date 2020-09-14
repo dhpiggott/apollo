@@ -24,7 +24,7 @@ object Apollo extends App {
            V1: (quantization 50) (tempo 240) (set-duration 0.5) (octave :down) c d e f (transposition 2) f (transposition 0) a b > c |
            V2: (quantization 50) (tempo 240) (set-duration (note-length 8)) c < b a g f e d c |
            V0: %steps c d e f g a b > c |
-               @steps c < b a g f e d c |
+               @steps c < b [a g f] e d c |
                (panning 100) (track-volume 50) (octave 4) (set-duration (ms 5000)) c/e/g |
       """
     )

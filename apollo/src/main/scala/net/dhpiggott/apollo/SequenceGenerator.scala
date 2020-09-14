@@ -179,6 +179,11 @@ object SequenceGenerator {
                 )
               )
 
+            case net.dhpiggott.apollo.Sequence(elements) =>
+              val (sequenceEvents, updatedPartState) =
+                generateMidiEvents(elements, partState)
+              events ++ sequenceEvents -> updatedPartState
+
             case voice @ Voice(value) if value == 0 =>
               events -> partState.copy(
                 currentVoice = voice,
