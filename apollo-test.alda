@@ -1,0 +1,13 @@
+oboe:
+  (volume 50) V0: o4 c4. d8 r2 | (volume 75) e8 f r2. | (volume 100) c8/e4/g4 r8 a4 b (octave :up) c | c2.~4 |
+  V1: (quantization 50) (tempo 240) (set-duration 0.5) (octave :down) c d e f (transposition 2) f (transposition 0) a b > c |
+  V2: (quantization 50) (tempo 240) (set-duration (note-length 8)) c < b a g f e d c |
+  V0: [%steps c d e f g a b > c |
+  @steps c < b [a g f] e d c |]*2
+  (panning 100) (track-volume 50) (octave 4) (set-duration (ms 5000)) c/e/g |
+
+piano/violin "group1":
+  (volume 50) V0: o4 c4. d8 r2 | (volume 75) e8 f r2.
+
+group1.piano:
+  c d e f

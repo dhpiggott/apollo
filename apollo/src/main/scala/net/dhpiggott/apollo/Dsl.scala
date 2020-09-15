@@ -1,12 +1,81 @@
 package net.dhpiggott.apollo
 
-import fastparse._, MultiLineWhitespace._
+import fastparse.ScriptWhitespace._
+import fastparse._
 
-final case class Part(instrument: String, elements: Seq[ScoreElement])
-object Part {
-  def parse[_: P]: P[Part] =
-    P(Primitives.name ~/ ":" ~/ ScoreElement.parse.rep(1))
-      .map((Part.apply _).tupled)
+final case class Score(elements: Seq[ScoreElement]) {
+  def show: String = s"${elements.map(_.show).mkString(" ")}"
+}
+object Score {
+  def parse[_: P]: P[Score] =
+    (Start ~ ScoreElement.parse.rep ~ End).map(Score.apply _)
+}
+
+sealed abstract class InstrumentCall extends ScoreElement {
+  def show: String
+}
+object InstrumentCall {
+  final case class InstrumentInstance(
+      stockInstrumentNamesOrNickname: String,
+      nickname: Option[String]
+  ) extends InstrumentCall {
+    def show: String =
+      s"$stockInstrumentNamesOrNickname${nickname.fold("")(nickname => s""" "$nickname"""")}:"
+  }
+  final case class InstrumentGroup(
+      stockInstrumentNamesOrNicknames: Seq[String],
+      groupAlias: Option[String]
+  ) extends InstrumentCall {
+    def show: String =
+      s"${stockInstrumentNamesOrNicknames.mkString("/")}${groupAlias.fold("")(groupAlias => s""" "$groupAlias"""")}:"
+  }
+  final case class InstrumentGroupMember(
+      groupAlias: String,
+      stockInstrumentNameOrNickname: String
+  ) extends InstrumentCall {
+    def show: String = s"$groupAlias.$stockInstrumentNameOrNickname:"
+  }
+  def parse[_: P]: P[InstrumentCall] =
+    Primitives.name.flatMapX(firstName =>
+      SingleChar.flatMapX {
+        case ':' =>
+          Pass(
+            InstrumentInstance(
+              stockInstrumentNamesOrNickname = firstName,
+              nickname = None
+            )
+          )
+
+        case ' ' | '\t' | '\r' | '\n' =>
+          (CharsWhile {
+            case ' ' | '\t' | '\r' | '\n' => true
+            case _                        => false
+          }.? ~~ ("\"" ~~/ Primitives.name ~~/ "\"").? ~~/ ":").map(
+            InstrumentInstance(stockInstrumentNamesOrNickname = firstName, _)
+          )
+
+        case '/' =>
+          (Primitives.name
+            .repX(sep = "/") ~ ("\"" ~~/ Primitives.name ~~/ "\"").?
+            ~~/ ":")
+            .map {
+              case (stockInstrumentNameOrNicknames, groupAlias) =>
+                InstrumentGroup(
+                  stockInstrumentNamesOrNicknames =
+                    firstName +: stockInstrumentNameOrNicknames,
+                  groupAlias
+                )
+            }
+
+        case '.' =>
+          (Primitives.name ~~/ ":").map(
+            InstrumentGroupMember(groupAlias = firstName, _)
+          )
+
+        case _ =>
+          Fail
+      }
+    )
 }
 
 final case class Pitch(chroma: Int) {
@@ -43,7 +112,8 @@ sealed abstract class ScoreElement {
 }
 object ScoreElement {
   def parse[_: P]: P[ScoreElement] =
-    Attribute.Duration.parse | Attribute.Octave.parse | Attribute.Panning.parse |
+    InstrumentCall.parse |
+      Attribute.Duration.parse | Attribute.Octave.parse | Attribute.Panning.parse |
       Attribute.Quantization.parse | Attribute.Tempo.parse | Attribute.TrackVolume.parse |
       Attribute.Transposition.parse | Attribute.Volume.parse |
       Repeat.parse | Sequence.parse | Voice.parse | Chord.parse |
@@ -94,8 +164,8 @@ object Attribute {
           P("(" ~ "ms" ~/ Primitives.int ~/ ")")
             .map(Attribute.Duration.Milliseconds)
       ).map(
-          (Attribute.Duration.apply _).tupled
-        )
+        (Attribute.Duration.apply _).tupled
+      )
   }
 
   // TODO: https://github.com/alda-lang/alda/blob/master/doc/attributes.md#key-signature
@@ -125,8 +195,8 @@ object Attribute {
           P(":up").map(_ => Attribute.Octave.Increment) |
           P(":down").map(_ => Attribute.Octave.Decrement)
       ).map(
-          (Attribute.Octave.apply _).tupled
-        )
+        (Attribute.Octave.apply _).tupled
+      )
   }
 
   final case class Panning(override val global: Boolean, value: Int)
@@ -137,11 +207,11 @@ object Attribute {
   object Panning {
     def parse[_: P]: P[Attribute.Panning] =
       parser(
-        "panning" | "pan",
+        StringIn("panning", "pan"),
         Primitives.int
       ).map(
-          (Attribute.Panning.apply _).tupled
-        )
+        (Attribute.Panning.apply _).tupled
+      )
   }
 
   final case class Quantization(override val global: Boolean, value: Int)
@@ -152,13 +222,14 @@ object Attribute {
   object Quantization {
     def parse[_: P]: P[Attribute.Quantization] =
       parser(
-        "quantization" | "quant" | "quantize",
+        StringIn("quantization", "quant", "quantize"),
         Primitives.int
       ).map(
-          (Attribute.Quantization.apply _).tupled
-        )
+        (Attribute.Quantization.apply _).tupled
+      )
   }
 
+  // TODO: https://github.com/alda-lang/alda/blob/master/doc/tempo.md#the-tempo-attribute
   final case class Tempo(override val global: Boolean, beatsPerMinute: Int)
       extends ScoreElement
       with Attribute {
@@ -182,7 +253,7 @@ object Attribute {
   object TrackVolume {
     def parse[_: P]: P[Attribute.TrackVolume] =
       parser(
-        "track-volume" | "track-vol",
+        StringIn("track-volume", "track-vol"),
         Primitives.int
       ).map(
         (Attribute.TrackVolume.apply _).tupled
@@ -197,7 +268,7 @@ object Attribute {
   object Transposition {
     def parse[_: P]: P[Attribute.Transposition] =
       parser(
-        "transposition" | "transpose",
+        StringIn("transposition", "transpose"),
         Primitives.int
       ).map(
         (Attribute.Transposition.apply _).tupled
@@ -212,7 +283,7 @@ object Attribute {
   object Volume {
     def parse[_: P]: P[Attribute.Volume] =
       parser(
-        "volume" | "vol",
+        StringIn("volume", "vol"),
         Primitives.int
       ).map(
         (Attribute.Volume.apply _).tupled
@@ -239,6 +310,8 @@ object Sequence {
   def parse[_: P]: P[Sequence] =
     P("[" ~ ScoreElement.parse.rep ~ "]").map(Sequence(_))
 }
+
+// TODO: https://github.com/alda-lang/alda/blob/master/doc/variables.md
 
 final case class Voice(value: Int) extends ScoreElement {
   def show: String = s"V$value:"
@@ -280,6 +353,8 @@ case object OctaveDecrement extends ScoreElement with ChordElement {
   def parse[_: P]: P[OctaveDecrement.type] =
     P("<").map(_ => OctaveDecrement)
 }
+
+// TODO: https://github.com/alda-lang/alda/blob/master/doc/cram.md
 
 final case class Note(pitch: Pitch, duration: Option[Note.Duration])
     extends ScoreElement
@@ -347,7 +422,7 @@ case object Barline extends ScoreElement {
 }
 
 final case class Marker(name: String) extends ScoreElement {
-  def show: String = s"@$name"
+  def show: String = s"%$name"
 }
 object Marker {
   def parse[_: P]: P[Marker] =
@@ -355,7 +430,7 @@ object Marker {
 }
 
 final case class MarkerReference(marker: Marker) extends ScoreElement {
-  def show: String = s"%${marker.name}"
+  def show: String = s"@${marker.name}"
 }
 object MarkerReference {
   def parse[_: P]: P[MarkerReference] =
