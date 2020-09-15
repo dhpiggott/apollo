@@ -220,6 +220,7 @@ object Attribute {
   }
 }
 
+// TODO: https://github.com/alda-lang/alda/blob/master/doc/repeats.md#repeats
 final case class Repeat(sequence: Sequence, repetitions: Int)
     extends ScoreElement {
   def show: String = s"${sequence.show}*$repetitions"
