@@ -2,8 +2,9 @@ package net.dhpiggott.apollo
 
 import javax.sound.midi._
 
-import zio._
-import zio.console._
+import fastparse._, MultiLineWhitespace._
+
+import zio._, console._
 
 // TODO: Review
 // https://github.com/alda-lang/alda-server-clj/blob/master/src/alda/worker.clj,
@@ -18,7 +19,7 @@ object Apollo extends App {
 
   private[this] val program
       : RIO[Console with Has[Synthesizer] with Has[Sequencer], Unit] = for {
-    part <- ScoreParser.parseScorePart(
+    part <- parseScorePart(
       """oboe:
                (volume 50) V0: o4 c4. d8 r2 | (volume 75) e8 f r2. | (volume 100) c8/e4/g4 r8 a4 b (octave :up) c | c2.~4 |
            V1: (quantization 50) (tempo 240) (set-duration 0.5) (octave :down) c d e f (transposition 2) f (transposition 0) a b > c |
@@ -35,6 +36,14 @@ object Apollo extends App {
       SequenceGenerator.generateSequence(part, channel = 0)
     )
   } yield ()
+
+  private[this] def parseScorePart(scorePart: String): Task[Part] = {
+    def partWithEnd[_: P]: P[Part] = P(Part.parse ~ End)
+    parse(scorePart, partWithEnd(_)) match {
+      case failure: Parsed.Failure  => Task.fail(failure.get)
+      case Parsed.Success(value, _) => UIO(value)
+    }
+  }
 
   private[this] def playSequence(
       sequence: Sequence
