@@ -12,6 +12,3 @@ lazy val apollo =
         Dependencies.zioCore
       )
     )
-    .settings(
-      run / fork := true
-    )
