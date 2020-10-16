@@ -17,7 +17,7 @@ import zio.console._
 object Apollo extends App {
 
   override def run(args: List[String]): URIO[ZEnv, ExitCode] =
-    program(args).provideCustomLayer(synthesizer ++ sequencer).exitCode
+    program(args).provideCustomLayer(midiSynthesizer ++ midiSequencer).exitCode
 
   private[this] def program(
       args: List[String]
@@ -30,10 +30,10 @@ object Apollo extends App {
         case Parsed.Success(value, _) => UIO(value)
       }
       _ <- putStrLn(parsedScore.show)
-      _ <- playSequence(SequenceGenerator.generateSequence(parsedScore))
+      _ <- playMidiSequence(MidiSequenceGenerator.generateSequence(parsedScore))
     } yield ()
 
-  private[this] def playSequence(
+  private[this] def playMidiSequence(
       sequence: Sequence
   ): RIO[Has[Synthesizer] with Has[Sequencer], Unit] =
     for {
@@ -51,7 +51,7 @@ object Apollo extends App {
       )
     } yield ()
 
-  private[this] def synthesizer: TaskLayer[Has[Synthesizer]] =
+  private[this] def midiSynthesizer: TaskLayer[Has[Synthesizer]] =
     Managed
       .make(
         for {
@@ -61,7 +61,7 @@ object Apollo extends App {
       )(synthesizer => Task(synthesizer.close).orDie)
       .toLayer
 
-  private[this] def sequencer: TaskLayer[Has[Sequencer]] =
+  private[this] def midiSequencer: TaskLayer[Has[Sequencer]] =
     Managed
       .make(
         for {

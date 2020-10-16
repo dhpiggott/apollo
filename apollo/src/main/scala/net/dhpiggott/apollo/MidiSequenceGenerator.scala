@@ -2,7 +2,7 @@ package net.dhpiggott.apollo
 
 import javax.sound.midi._
 
-object SequenceGenerator {
+object MidiSequenceGenerator {
 
   final case class ScoreState(
       markers: Map[Marker, Long],
@@ -20,143 +20,82 @@ object SequenceGenerator {
         instrumentCall: InstrumentCall
     ): ScoreState =
       instrumentCall match {
-        case InstrumentCall
-              .InstrumentInstance(stockInstrumentNameOrNickname, None) =>
-          instruments.find(_.nickname.contains(stockInstrumentNameOrNickname)) match {
-            // stockInstrumentNameOrNickname refers to a previously named instrument
-            case Some(instrumentState) =>
-              // Refer to that instrument
-              copy(
-                instruments =
-                  instruments
-                    .filterNot(_ == instrumentState)
-                    .map(_.copy(isActive = false)) :+ instrumentState
-                    .copy(isActive = true)
+        case InstrumentCall.InstrumentInstance(
+            stockInstrumentNameOrNickname,
+            maybeNickname
+            ) =>
+          val previouslyNamedInstrumentOrGroup = maybeNickname match {
+            case None =>
+              instruments.filter(instrumentState =>
+                instrumentState.nickname
+                  .contains(stockInstrumentNameOrNickname) || instrumentState.groupAlias
+                  .contains(stockInstrumentNameOrNickname)
               )
 
-            case None =>
-              instruments.filter(
-                _.groupAlias.contains(stockInstrumentNameOrNickname)
-              ) match {
-                // stockInstrumentNameOrNickname refers to a previously named group
-                case instrumentStates if instrumentStates.nonEmpty =>
-                  // Refer to that group
-                  copy(
-                    instruments = instruments
-                      .filterNot(
-                        instrumentStates.contains
-                      )
-                      .map(_.copy(isActive = false)) ++ instrumentStates.map(
-                      _.copy(isActive = true)
+            case Some(nickname) =>
+              if (instruments.exists(_.nickname.contains(nickname))) {
+                throw new IllegalArgumentException(
+                  s"""The alias "$nickname" has already been assigned to another instrument."""
+                )
+              }
+              if (instruments.exists(_.groupAlias.contains(nickname))) {
+                throw new IllegalArgumentException(
+                  s"""The alias "$nickname" has already been assigned to another group."""
+                )
+              }
+              Seq.empty
+          }
+
+          if (previouslyNamedInstrumentOrGroup.nonEmpty) {
+            withActiveInstruments(previouslyNamedInstrumentOrGroup)
+          } else {
+            instruments.find(
+              _.midiInstrument.names.contains(stockInstrumentNameOrNickname)
+            ) match {
+              case Some(instrumentState) =>
+                // TODO: Make the intent clearer
+                (maybeNickname.isDefined, instrumentState.nickname.isDefined) match {
+                  case (false, false) =>
+                    // We already have an instance, and it doesn't have a name
+                    withActiveInstruments(Seq(instrumentState))
+
+                  case _ =>
+                    throw new IllegalArgumentException(
+                      s"""Ambiguous instrument reference "$stockInstrumentNameOrNickname": can't use both unnamed and named instances of the same instrument in a score."""
                     )
-                  )
+                }
 
-                case _ =>
-                  MidiInstruments.midiInstruments.find(
-                    _.names.contains(stockInstrumentNameOrNickname)
-                  ) match {
-                    // stockInstrumentNameOrNickname is a stock instrument
-                    case Some(midiInstrument) =>
-                      instruments.find(
-                        _.midiInstrument.names
-                          .contains(stockInstrumentNameOrNickname)
-                      ) match {
-                        // We don't have an instance in the score yet
-                        case None =>
-                          // Create a new instance
-                          copy(
-                            instruments = instruments.map(
-                              _.copy(isActive = false)
-                            ) :+ InstrumentState
-                              .make(
-                                midiInstrument = midiInstrument,
-                                midiChannel = nextNonPercussionMidiChannel,
-                                nickname = None,
-                                groupAlias = None
-                              )
+              case None =>
+                // stockInstrumentNameOrNickname is expected to be a stock instrument
+                MidiInstruments.midiInstruments.find(
+                  _.names.contains(stockInstrumentNameOrNickname)
+                ) match {
+                  case None =>
+                    throw new IllegalArgumentException(
+                      s"""Unrecognized instrument: "$stockInstrumentNameOrNickname"."""
+                    )
+
+                  case Some(midiInstrument) =>
+                    // Create a new instance
+                    withActiveInstruments(
+                      Seq(
+                        InstrumentState
+                          .make(
+                            midiInstrument = midiInstrument,
+                            midiChannel = nextNonPercussionMidiChannel,
+                            nickname = maybeNickname,
+                            groupAlias = None
                           )
-
-                        // We already have a named instance in the score
-                        case Some(instrumentState)
-                            if instrumentState.nickname.isDefined =>
-                          throw new IllegalArgumentException(
-                            s"""Ambiguous instrument reference "$stockInstrumentNameOrNickname": can't use both unnamed and named instances of the same instrument in a score."""
-                          )
-
-                        // We already have an instance, and it doesn't have a name
-                        case Some(instrumentState)
-                            if instrumentState.nickname.isEmpty =>
-                          copy(
-                            instruments =
-                              instruments
-                                .filterNot(_ == instrumentState)
-                                .map(_.copy(isActive = false)) :+ instrumentState
-                                .copy(isActive = true)
-                          )
-                      }
-
-                    case None =>
-                      throw new IllegalArgumentException(
-                        s"""Unrecognized instrument: "$stockInstrumentNameOrNickname"."""
                       )
-                  }
-              }
+                    )
+                }
+            }
           }
 
-        case InstrumentCall
-              .InstrumentInstance(stockInstrumentName, Some(nickname)) =>
-          MidiInstruments.midiInstruments.find(
-            _.names.contains(stockInstrumentName)
-          ) match {
-            // stockInstrumentName is expected to be a stock instrument
-            case None =>
-              throw new IllegalArgumentException(
-                s"""Unrecognized instrument: "$stockInstrumentName"."""
-              )
-
-            case Some(midiInstrument) =>
-              instruments.find(_.nickname.contains(nickname)) match {
-                case Some(_) =>
-                  throw new IllegalArgumentException(
-                    s"""The alias "$nickname" has already been assigned to another instrument."""
-                  )
-
-                case None =>
-                  instruments.find(_.groupAlias.contains(nickname)) match {
-                    case Some(_) =>
-                      throw new IllegalArgumentException(
-                        s"""The alias "$nickname" has already been assigned to another group."""
-                      )
-
-                    case None =>
-                      instruments.find(
-                        _.midiInstrument.names.contains(stockInstrumentName)
-                      ) match {
-                        case Some(_) =>
-                          throw new IllegalArgumentException(
-                            s"""Ambiguous instrument reference "$stockInstrumentName": can't use both unnamed and named instances of the same instrument in a score."""
-                          )
-
-                        case None =>
-                          // Create a new instance
-                          copy(
-                            instruments = instruments.map(
-                              _.copy(isActive = false)
-                            ) :+ InstrumentState
-                              .make(
-                                midiInstrument = midiInstrument,
-                                midiChannel = nextNonPercussionMidiChannel,
-                                nickname = Some(nickname),
-                                groupAlias = None
-                              )
-                          )
-                      }
-                  }
-              }
-          }
-
-        case InstrumentCall
-              .InstrumentGroup(stockInstrumentNamesOrNicknames, None) =>
+        case InstrumentCall.InstrumentGroup(
+            stockInstrumentNamesOrNicknames,
+            maybeGroupAlias
+            ) =>
           // Same named instance, e.g. foo/foo or same stock instrument e.g. piano/piano
           if (stockInstrumentNamesOrNicknames.size > stockInstrumentNamesOrNicknames.distinct.size) {
             throw new IllegalArgumentException(
@@ -164,31 +103,43 @@ object SequenceGenerator {
                 .mkString("/")}."""
             )
           } else {
+            maybeGroupAlias.foreach { groupAlias =>
+              if (instruments.exists(_.nickname.contains(groupAlias))) {
+                throw new IllegalArgumentException(
+                  s"""The alias "$groupAlias" has already been assigned to another instrument."""
+                )
+              }
+              if (instruments.exists(_.groupAlias.contains(groupAlias))) {
+                throw new IllegalArgumentException(
+                  s"""The alias "$groupAlias" has already been assigned to another group."""
+                )
+              }
+            }
             val namedInstances = stockInstrumentNamesOrNicknames
               .flatMap(stockInstrumentNamesOrNickname =>
-                instruments
-                  .find(_.nickname.contains(stockInstrumentNamesOrNickname))
-              )
-            if (namedInstances.size == stockInstrumentNamesOrNicknames.size) {
-              copy(
-                instruments = instruments
-                  .filterNot(
-                    namedInstances.contains
-                  )
-                  .map(_.copy(isActive = false)) ++ namedInstances.map(
-                  _.copy(isActive = true)
+                instruments.find(
+                  _.nickname
+                    .contains(stockInstrumentNamesOrNickname)
                 )
               )
+              .map(_.copy(groupAlias = maybeGroupAlias))
+            if (namedInstances.size == stockInstrumentNamesOrNicknames.size) {
+              withActiveInstruments(namedInstances)
             } else {
               val stockInstruments = stockInstrumentNamesOrNicknames
                 .flatMap(stockInstrumentNamesOrNickname =>
-                  MidiInstruments.midiInstruments
-                    .find(_.names.contains(stockInstrumentNamesOrNickname))
+                  MidiInstruments.midiInstruments.find(
+                    _.names.contains(stockInstrumentNamesOrNickname)
+                  )
                 )
               if (stockInstruments.size == stockInstrumentNamesOrNicknames.size) {
+                // TODO: Clean this up
                 val (newActiveInstruments, _) =
                   stockInstruments.foldLeft(
-                    (Set.empty[InstrumentState], nextNonPercussionMidiChannel)
+                    (
+                      Seq.empty[InstrumentState],
+                      nextNonPercussionMidiChannel
+                    )
                   ) {
                     case (
                         (
@@ -197,29 +148,15 @@ object SequenceGenerator {
                         ),
                         stockInstrument
                         ) =>
-                      newActiveInstruments + instruments
-                        .find(instrument =>
-                          instrument.midiInstrument == stockInstrument && instrument.nickname.isEmpty
-                        )
-                        .getOrElse(
-                          InstrumentState
-                            .make(
-                              midiInstrument = stockInstrument,
-                              midiChannel = updatedNextNonPercussionMidiChannel,
-                              nickname = None,
-                              groupAlias = None
-                            )
-                        ) -> (updatedNextNonPercussionMidiChannel + 1)
+                      (newActiveInstruments :+ InstrumentState
+                        .make(
+                          midiInstrument = stockInstrument,
+                          midiChannel = updatedNextNonPercussionMidiChannel,
+                          nickname = None,
+                          groupAlias = maybeGroupAlias
+                        )) -> (updatedNextNonPercussionMidiChannel + 1)
                   }
-                copy(
-                  instruments = instruments
-                    .filterNot(
-                      newActiveInstruments.contains
-                    )
-                    .map(_.copy(isActive = false)) ++ newActiveInstruments.map(
-                    _.copy(isActive = true)
-                  )
-                )
+                withActiveInstruments(newActiveInstruments)
               } else {
                 throw new IllegalArgumentException(
                   s"""Invalid instrument grouping "${stockInstrumentNamesOrNicknames
@@ -229,103 +166,11 @@ object SequenceGenerator {
             }
           }
 
-        case InstrumentCall.InstrumentGroup(
-            stockInstrumentNamesOrNicknames,
-            Some(groupAlias)
-            ) =>
-          // Same named instance, e.g. foo/foo or same stock instrument e.g. piano/piano
-          if (stockInstrumentNamesOrNicknames.size > stockInstrumentNamesOrNicknames.distinct.size) {
-            throw new IllegalArgumentException(
-              s"""Invalid instrument grouping: ${stockInstrumentNamesOrNicknames
-                .mkString("/")}."""
-            )
-          } else {
-            instruments.find(_.nickname.contains(groupAlias)) match {
-              case Some(_) =>
-                throw new IllegalArgumentException(
-                  s"""The alias "$groupAlias" has already been assigned to another instrument."""
-                )
-
-              case None =>
-                instruments.find(_.groupAlias.contains(groupAlias)) match {
-                  case Some(_) =>
-                    throw new IllegalArgumentException(
-                      s"""The alias "$groupAlias" has already been assigned to another group."""
-                    )
-
-                  case None =>
-                    val namedInstances = stockInstrumentNamesOrNicknames
-                      .flatMap(stockInstrumentNamesOrNickname =>
-                        instruments.find(
-                          _.nickname
-                            .contains(stockInstrumentNamesOrNickname)
-                        )
-                      )
-                      .map(_.copy(groupAlias = Some(groupAlias)))
-                    if (namedInstances.size == stockInstrumentNamesOrNicknames.size) {
-                      copy(
-                        instruments = instruments
-                          .filterNot(
-                            namedInstances.contains
-                          )
-                          .map(_.copy(isActive = false)) ++ namedInstances.map(
-                          _.copy(isActive = true)
-                        )
-                      )
-                    } else {
-                      val stockInstruments = stockInstrumentNamesOrNicknames
-                        .flatMap(stockInstrumentNamesOrNickname =>
-                          MidiInstruments.midiInstruments.find(
-                            _.names.contains(stockInstrumentNamesOrNickname)
-                          )
-                        )
-                      if (stockInstruments.size == stockInstrumentNamesOrNicknames.size) {
-                        val (newActiveInstruments, _) =
-                          stockInstruments.foldLeft(
-                            (
-                              Set.empty[InstrumentState],
-                              nextNonPercussionMidiChannel
-                            )
-                          ) {
-                            case (
-                                (
-                                  newActiveInstruments,
-                                  updatedNextNonPercussionMidiChannel
-                                ),
-                                stockInstrument
-                                ) =>
-                              newActiveInstruments + InstrumentState
-                                .make(
-                                  midiInstrument = stockInstrument,
-                                  midiChannel =
-                                    updatedNextNonPercussionMidiChannel,
-                                  nickname = None,
-                                  groupAlias = Some(groupAlias)
-                                ) -> (updatedNextNonPercussionMidiChannel + 1)
-                          }
-                        copy(
-                          instruments = instruments
-                            .filterNot(
-                              newActiveInstruments.contains
-                            )
-                            .map(_.copy(isActive = false)) ++ newActiveInstruments
-                            .map(_.copy(isActive = true))
-                        )
-                      } else {
-                        throw new IllegalArgumentException(
-                          s"""Invalid instrument grouping "${stockInstrumentNamesOrNicknames
-                            .mkString("/")}": can't use both stock instruments and named instances in a group.""""
-                        )
-                      }
-                    }
-                }
-            }
-          }
-
         case InstrumentCall.InstrumentGroupMember(
             groupAlias,
             stockInstrumentNameOrNickname
             ) =>
+          // TODO: DRY
           instruments.filter(_.groupAlias.contains(groupAlias)) match {
             case instrumentStates if instrumentStates.isEmpty =>
               throw new IllegalArgumentException(
@@ -345,16 +190,21 @@ object SequenceGenerator {
                   )
 
                 case Some(instrumentState) =>
-                  copy(
-                    instruments =
-                      instruments
-                        .filterNot(_ == instrumentState)
-                        .map(_.copy(isActive = false)) :+ instrumentState
-                        .copy(isActive = true)
-                  )
+                  withActiveInstruments(Seq(instrumentState))
               }
           }
       }
+
+    def withActiveInstruments(
+        activeInstruments: Seq[InstrumentState]
+    ): ScoreState =
+      copy(
+        instruments =
+          instruments
+            .map(_.copy(isActive = false))
+            .filterNot(activeInstruments.map(_.copy(isActive = false)).contains) ++ activeInstruments
+            .map(_.copy(isActive = true))
+      )
 
     // TODO: Create new track when we run out of channels
     def nextNonPercussionMidiChannel: Int =
