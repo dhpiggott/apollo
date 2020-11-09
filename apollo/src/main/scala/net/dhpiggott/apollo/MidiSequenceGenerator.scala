@@ -15,6 +15,7 @@ object MidiSequenceGenerator {
     // and
     // https://github.com/alda-lang/alda/blob/master/doc/instance-and-group-assignment.md)
     def updateActiveInstruments(
+        sequence: Sequence,
         instrumentCall: InstrumentCall
     ): ScoreState =
       instrumentCall match {
@@ -66,20 +67,23 @@ object MidiSequenceGenerator {
                   .find(
                     _.names.contains(stockInstrumentNameOrNickname)
                   )
-                  .map(midiInstrument =>
+                  .map { midiInstrument =>
+                    val (midiTrack, midiChannel) =
+                      nextMidiTrackAndChannel(midiInstrument)
                     // Create a new instance
                     withActiveInstruments(
                       Seq(
-                        InstrumentState
-                          .make(
-                            midiInstrument = midiInstrument,
-                            midiChannel = nextNonPercussionMidiChannel,
-                            nickname = maybeNickname,
-                            groupAlias = None
-                          )
+                        InstrumentState.make(
+                          sequence,
+                          midiInstrument,
+                          midiTrack,
+                          midiChannel,
+                          nickname = maybeNickname,
+                          groupAlias = None
+                        )
                       )
                     )
-                  )
+                  }
                   .getOrElse(
                     throw new IllegalArgumentException(
                       s"""Unrecognized instrument: "$stockInstrumentNameOrNickname"."""
@@ -99,17 +103,18 @@ object MidiSequenceGenerator {
                 .mkString("/")}."""
             )
           } else {
-            maybeGroupAlias.foreach { groupAlias =>
+            maybeGroupAlias.foreach(groupAlias =>
               if (instruments.exists(_.nickname.contains(groupAlias))) {
                 throw new IllegalArgumentException(
                   s"""The alias "$groupAlias" has already been assigned to another instrument."""
                 )
-              } else if (instruments.exists(_.groupAlias.contains(groupAlias))) {
+              } else if (instruments
+                           .exists(_.groupAlias.contains(groupAlias))) {
                 throw new IllegalArgumentException(
                   s"""The alias "$groupAlias" has already been assigned to another group."""
                 )
               }
-            }
+            )
             val namedInstances = for {
               stockInstrumentNamesOrNickname <- stockInstrumentNamesOrNicknames
               namedInstance <- instruments.find(
@@ -126,20 +131,23 @@ object MidiSequenceGenerator {
                 )
               } yield stockInstrument
               if (stockInstruments.size == stockInstrumentNamesOrNicknames.size) {
-                stockInstruments.foldLeft(this)(
-                  (updatedScoreState, stockInstrument) =>
+                stockInstruments.foldLeft(this) {
+                  (updatedScoreState, midiInstrument) =>
+                    val (midiTrack, midiChannel) =
+                      nextMidiTrackAndChannel(midiInstrument)
                     updatedScoreState.withActiveInstruments(
                       updatedScoreState.instruments.filter(_.isActive) :+
                         InstrumentState
                           .make(
-                            midiInstrument = stockInstrument,
-                            midiChannel =
-                              updatedScoreState.nextNonPercussionMidiChannel,
+                            sequence,
+                            midiInstrument,
+                            midiTrack,
+                            midiChannel,
                             nickname = None,
                             groupAlias = maybeGroupAlias
                           )
                     )
-                )
+                }
               } else {
                 throw new IllegalArgumentException(
                   s"""Invalid instrument grouping "${stockInstrumentNamesOrNicknames
@@ -182,15 +190,37 @@ object MidiSequenceGenerator {
       )
     }
 
-    // TODO: Create new track when we run out of channels
-    def nextNonPercussionMidiChannel: Int =
-      instruments
-        .map(_.midiChannel)
-        .maxOption
-        .map(_ + 1)
-        // Because channel 10 is percussion (9 here because the JVM counts from 0)
-        .filter(_ != 9)
-        .getOrElse(0)
+    def nextMidiTrackAndChannel(
+        midiInstrument: MidiInstruments.MidiInstrument
+    ): (Int, Int) = midiInstrument match {
+      case MidiInstruments.MidiPercussionInstrument =>
+        // Channel 10 is percussion (9 here because the JVM counts from 0)
+        (0, 9)
+
+      case _: MidiInstruments.MidiNonPercussionInstrument =>
+        def nextNonPercussionMidiTrackAndChannel(
+            candidateMidiTrack: Int = 0,
+            candidateMidiChannel: Int = 0
+        ): (Int, Int) = {
+          // Because channel 10 is percussion (9 here because the JVM counts from 0)
+          val isAvailable = candidateMidiChannel != 9 && instruments
+            .filter(_.midiTrack == candidateMidiTrack)
+            .filter(_.midiChannel == candidateMidiChannel)
+            .isEmpty
+          if (isAvailable) {
+            (candidateMidiTrack, candidateMidiChannel)
+            // A track supports 16 channels (15 here because the JVM counts from 0)
+          } else if (candidateMidiChannel < 15) {
+            nextNonPercussionMidiTrackAndChannel(
+              candidateMidiTrack,
+              candidateMidiChannel + 1
+            )
+          } else {
+            nextNonPercussionMidiTrackAndChannel(candidateMidiTrack + 1, 0)
+          }
+        }
+        nextNonPercussionMidiTrackAndChannel()
+    }
 
     def currentInstrumentStates: Seq[InstrumentState] =
       instruments.filter(_.isActive)
@@ -219,6 +249,7 @@ object MidiSequenceGenerator {
 
   final case class InstrumentState(
       midiInstrument: MidiInstruments.MidiInstrument,
+      midiTrack: Int,
       midiChannel: Int,
       nickname: Option[String],
       groupAlias: Option[String],
@@ -249,25 +280,69 @@ object MidiSequenceGenerator {
   object InstrumentState {
     // TODO: Initialize sequence using these values
     def make(
+        sequence: Sequence,
         midiInstrument: MidiInstruments.MidiInstrument,
+        midiTrack: Int,
         midiChannel: Int,
         nickname: Option[String],
         groupAlias: Option[String]
-    ): InstrumentState = InstrumentState(
-      midiInstrument = midiInstrument,
-      midiChannel = midiChannel,
-      nickname = nickname,
-      groupAlias = groupAlias,
-      isActive = true,
-      quantization = 90,
-      tempo = 120,
-      transposition = 0,
-      volume = 100,
-      currentVoice = Voice(0),
-      voiceStates = Map(
-        Voice(0) -> VoiceState.default
+    ): InstrumentState = {
+      val track = sequence
+        .getTracks()
+        .lift(midiTrack)
+        .getOrElse(
+          sequence.createTrack()
+        )
+      midiInstrument match {
+        case MidiInstruments.MidiPercussionInstrument =>
+          track.add(
+            new MidiEvent(
+              new ShortMessage(
+                ShortMessage.PROGRAM_CHANGE,
+                midiChannel,
+                9,
+                0
+              ),
+              0
+            )
+          )
+          ()
+
+        case MidiInstruments.MidiNonPercussionInstrument(
+            _,
+            _,
+            midiProgramNumber
+            ) =>
+          track.add(
+            new MidiEvent(
+              new ShortMessage(
+                ShortMessage.PROGRAM_CHANGE,
+                midiChannel,
+                midiProgramNumber,
+                0
+              ),
+              0
+            )
+          )
+          ()
+      }
+      InstrumentState(
+        midiInstrument = midiInstrument,
+        midiTrack = midiTrack,
+        midiChannel = midiChannel,
+        nickname = nickname,
+        groupAlias = groupAlias,
+        isActive = true,
+        quantization = 90,
+        tempo = 120,
+        transposition = 0,
+        volume = 100,
+        currentVoice = Voice(0),
+        voiceStates = Map(
+          Voice(0) -> VoiceState.default
+        )
       )
-    )
+    }
   }
 
   final case class VoiceState(
@@ -287,7 +362,6 @@ object MidiSequenceGenerator {
   def generateSequence(score: Score): Sequence = {
     val pulsesPerQuarterNote = 128
     val sequence = new Sequence(Sequence.PPQ, pulsesPerQuarterNote)
-    val track = sequence.createTrack()
     def generateSequence(
         scoreState: ScoreState,
         elements: Seq[ScoreElement]
@@ -297,33 +371,7 @@ object MidiSequenceGenerator {
       elements.foldLeft(scoreState)((scoreState, element) =>
         element match {
           case instrumentCall: InstrumentCall =>
-            val updatedScoreState =
-              scoreState.updateActiveInstruments(instrumentCall)
-            updatedScoreState.foreachInstrument(instrumentState =>
-              instrumentState.midiInstrument match {
-                case MidiInstruments.MidiPercussionInstrument =>
-                  ()
-
-                case MidiInstruments.MidiNonPercussionInstrument(
-                    _,
-                    _,
-                    midiProgramNumber
-                    ) =>
-                  track.add(
-                    new MidiEvent(
-                      new ShortMessage(
-                        ShortMessage.PROGRAM_CHANGE,
-                        instrumentState.midiChannel,
-                        midiProgramNumber,
-                        0
-                      ),
-                      0
-                    )
-                  )
-                  ()
-              }
-            )
-            updatedScoreState
+            scoreState.updateActiveInstruments(sequence, instrumentCall)
 
           case Attribute.Duration(_, value) =>
             scoreState.modifyCurrentInstrumentStates(instrumentState =>
@@ -371,19 +419,21 @@ object MidiSequenceGenerator {
             )
 
           case Attribute.Panning(_, value) =>
-            scoreState.foreachInstrument { instrumentState =>
-              track.add(
-                new MidiEvent(
-                  new ShortMessage(
-                    ShortMessage.CONTROL_CHANGE,
-                    instrumentState.midiChannel,
-                    10,
-                    ((value / 100d) * 127).toInt
-                  ),
-                  instrumentState.currentVoiceState.offset
+            scoreState.foreachInstrument {
+              instrumentState =>
+                val track = sequence.getTracks()(instrumentState.midiTrack)
+                track.add(
+                  new MidiEvent(
+                    new ShortMessage(
+                      ShortMessage.CONTROL_CHANGE,
+                      instrumentState.midiChannel,
+                      10,
+                      ((value / 100d) * 127).toInt
+                    ),
+                    instrumentState.currentVoiceState.offset
+                  )
                 )
-              )
-              ()
+                ()
             }
             scoreState
 
@@ -399,6 +449,7 @@ object MidiSequenceGenerator {
               BigInt(60000000 / beatsPerMinute).toByteArray
             assert(microsecondsPerQuartnerNote.size <= 3)
             scoreState.foreachInstrument { instrumentState =>
+              val track = sequence.getTracks()(instrumentState.midiTrack)
               track.add(
                 new MidiEvent(
                   new MetaMessage(
@@ -418,19 +469,21 @@ object MidiSequenceGenerator {
             )
 
           case Attribute.TrackVolume(_, value) =>
-            scoreState.foreachInstrument { instrumentState =>
-              track.add(
-                new MidiEvent(
-                  new ShortMessage(
-                    ShortMessage.CONTROL_CHANGE,
-                    instrumentState.midiChannel,
-                    7,
-                    ((value / 100d) * 127).toInt
-                  ),
-                  instrumentState.currentVoiceState.offset
+            scoreState.foreachInstrument {
+              instrumentState =>
+                val track = sequence.getTracks()(instrumentState.midiTrack)
+                track.add(
+                  new MidiEvent(
+                    new ShortMessage(
+                      ShortMessage.CONTROL_CHANGE,
+                      instrumentState.midiChannel,
+                      7,
+                      ((value / 100d) * 127).toInt
+                    ),
+                    instrumentState.currentVoiceState.offset
+                  )
                 )
-              )
-              ()
+                ()
             }
             scoreState
 
@@ -571,6 +624,7 @@ object MidiSequenceGenerator {
               instrumentState =>
                 val toneNumber =
                   (instrumentState.currentVoiceState.octave.value + 1) * 12 + note.pitch.chroma
+                val track = sequence.getTracks()(instrumentState.midiTrack)
                 track.add(
                   new MidiEvent(
                     new ShortMessage(

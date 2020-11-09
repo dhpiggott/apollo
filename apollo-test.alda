@@ -2,6 +2,7 @@ oboe:
   (volume 50) V0: o4 c4. d8 r2 | (volume 75) e8 f r2. | (volume 100) c8/e4/g4 r8 a4 b (octave :up) c | c2.~4 |
   V1: (quantization 50) (tempo 240) (set-duration 0.5) (octave :down) c d e f (transposition 2) f (transposition 0) a b > c |
   V2: (quantization 50) (tempo 240) (set-duration (note-length 8)) c < b a g f e d c |
+  %track-test-start
 #   V0: [%steps c d e f g a b > c |
 #   @steps c < b [a g f] e d c |]*2
 #   (panning 100) (track-volume 50) (octave 4) (set-duration (ms 5000)) c/e/g |
@@ -11,3 +12,63 @@ piano/violin "group1":
 
 group1.piano:
   c d e f
+
+percussion:
+  c d e f g a b
+
+celesta:
+  @track-test-start c
+
+midi-drawbar-organ:
+  @track-test-start r c
+
+guitar:
+  @track-test-start r r c
+
+acoustic-guitar:
+  @track-test-start r r r c
+
+acoustic-bass:
+  @track-test-start r r r r c
+
+viola:
+  @track-test-start r r r r r c
+
+cello:
+  @track-test-start r r r r r r c
+
+timpani:
+  @track-test-start r r r r r r r c
+
+midi-string-ensemble-1:
+  @track-test-start r r r r r r r r c
+
+trumpet:
+  @track-test-start r r r r r r r r r c
+
+trombone:
+  @track-test-start r r r r r r r r r r c
+
+tuba:
+  @track-test-start r r r r r r r r r r r c
+
+french-horn:
+  @track-test-start r r r r r r r r r r r r c
+
+soprano-sax:
+  @track-test-start r r r r r r r r r r r r r c
+
+alto-sax:
+  @track-test-start r r r r r r r r r r r r r r c
+
+tenor-sax:
+  @track-test-start r r r r r r r r r r r r r r r c
+
+bari-sax:
+  @track-test-start r r r r r r r r r r r r r r r r c
+
+bassoon:
+  @track-test-start r r r r r r r r r r r r r r r r r c
+
+flute:
+  @track-test-start r r r r r r r r r r r r r r r r r r r r r c c
