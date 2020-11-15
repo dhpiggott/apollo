@@ -278,7 +278,6 @@ object MidiSequenceGenerator {
   }
 
   object InstrumentState {
-    // TODO: Initialize sequence using these values
     def make(
         sequence: Sequence,
         midiInstrument: MidiInstruments.MidiInstrument,
